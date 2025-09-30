@@ -5,11 +5,13 @@ import { InputArea } from './components/InputArea';
 import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
 import { SavedListings } from './components/SavedListings';
-import { Platform, GeneratedListing, ImageFile, HistoryItem } from './types';
+import { SettingsModal } from './components/SettingsModal';
+import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys } from './types';
 import { generateListing } from './services/geminiService';
 
 const APP_HISTORY_KEY = 'marketplaceListingHistory';
 const SAVED_LISTINGS_KEY = 'marketplaceSavedListings';
+const API_KEYS_KEY = 'marketplaceApiKeys';
 
 const App: React.FC = () => {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
@@ -26,6 +28,9 @@ const App: React.FC = () => {
   const [activeSavedId, setActiveSavedId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'history' | 'saved'>('history');
 
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKeys>({ ebay: '', x: '', gemini: '', openai: '' });
+
   // Load data from localStorage on mount
   useEffect(() => {
     try {
@@ -40,9 +45,28 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("Failed to parse saved listings from localStorage", e);
     }
+    try {
+      const storedApiKeys = localStorage.getItem(API_KEYS_KEY);
+      if (storedApiKeys) {
+        // Ensure all keys are present, even if loading from older versions
+        const loadedKeys = JSON.parse(storedApiKeys);
+        setApiKeys(prevKeys => ({ ...prevKeys, ...loadedKeys }));
+      }
+    } catch (e) {
+      console.error("Failed to parse API keys from localStorage", e);
+    }
+  }, []);
+  
+  const handleSaveKeys = useCallback((keys: ApiKeys) => {
+    setApiKeys(keys);
+    localStorage.setItem(API_KEYS_KEY, JSON.stringify(keys));
   }, []);
 
   const handleGenerate = useCallback(async () => {
+    if (!apiKeys.gemini) {
+      setError('Google Gemini API key is missing. Please add it in the Settings panel.');
+      return;
+    }
     if (!textInput && !imageFile) {
       setError('Please provide an image or a text description.');
       return;
@@ -55,7 +79,7 @@ const App: React.FC = () => {
     setActiveSavedId(null);
 
     try {
-      const result = await generateListing(selectedPlatform, textInput, imageFile ?? undefined);
+      const result = await generateListing(selectedPlatform, textInput, apiKeys.gemini, imageFile ?? undefined);
       setGeneratedListing(result);
 
       const newHistoryItem: HistoryItem = {
@@ -78,7 +102,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedPlatform, textInput, imageFile]);
+  }, [selectedPlatform, textInput, imageFile, apiKeys.gemini]);
 
   const handleHistorySelect = (item: HistoryItem) => {
     setActiveHistoryId(item.id);
@@ -158,7 +182,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-light dark:bg-dark text-gray-900 dark:text-gray-100 font-sans">
-      <Header />
+      <Header onOpenSettings={() => setIsSettingsModalOpen(true)} />
       <main className="container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="flex flex-col space-y-6">
@@ -225,6 +249,12 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+      <SettingsModal 
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSave={handleSaveKeys}
+        initialKeys={apiKeys}
+      />
     </div>
   );
 };

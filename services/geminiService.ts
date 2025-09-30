@@ -1,6 +1,29 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Platform, ImageFile, GeneratedListing } from '../types';
+
+/**
+ * Performs a lightweight check to verify if the provided Gemini API key is valid.
+ * @param apiKey The Google Gemini API key to verify.
+ * @returns A promise that resolves to `true` if the key is valid, otherwise `false`.
+ */
+export const verifyApiKey = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) {
+    return false;
+  }
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    // This is a minimal, low-cost call to validate the key's authenticity.
+    await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "hi",
+    });
+    return true;
+  } catch (error) {
+    console.error("API Key validation failed:", error);
+    // An error during this minimal call strongly suggests an invalid key or configuration issue.
+    return false;
+  }
+};
 
 const getPlatformInstructions = (platform: Platform): string => {
   switch (platform) {
@@ -50,14 +73,15 @@ const buildPrompt = (platform: Platform, text: string, image?: ImageFile): any[]
 export const generateListing = async (
   platform: Platform,
   text: string,
+  apiKey: string,
   image?: ImageFile
 ): Promise<GeneratedListing> => {
     
-  if (!process.env.API_KEY) {
-    throw new Error("API key is not configured. Please set the API_KEY environment variable.");
+  if (!apiKey) {
+    throw new Error("Google Gemini API key is missing. Please add it in the Settings panel.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   const contents = { parts: buildPrompt(platform, text, image) };
 
   const responseSchema = {
@@ -95,7 +119,6 @@ export const generateListing = async (
     const jsonText = response.text.trim();
     const parsedJson = JSON.parse(jsonText);
     
-    // Quick validation
     if (!parsedJson.listing || !parsedJson.listing.title) {
         throw new Error("Invalid JSON structure received from API.");
     }
@@ -103,12 +126,26 @@ export const generateListing = async (
     return parsedJson as GeneratedListing;
 
   } catch (error) {
-    console.error("Error generating listing:", error);
+    console.error("Full API Error:", error);
+
     if (error instanceof Error) {
-        if (error.message.includes('API key not valid')) {
-            throw new Error("The provided Gemini API key is not valid. Please check your configuration.");
+        const errorMessage = error.message.toLowerCase();
+
+        if (errorMessage.includes('api key not valid')) {
+            throw new Error("The provided Gemini API key is not valid. Please check the key in the Settings panel and ensure it's correct.");
+        }
+        if (errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+            throw new Error("You've exceeded your API request limit. Please check your Google Cloud account for usage details or try again later.");
+        }
+        if (errorMessage.includes('safety')) {
+             throw new Error("The request was blocked by the AI's safety filters. Please try rephrasing your description or using a different image.");
+        }
+        if (errorMessage.includes('fetch')) {
+             throw new Error("A network error occurred. Please check your internet connection and try again.");
         }
     }
-    throw new Error("Failed to generate listing from Gemini API.");
+    
+    // Fallback for other API errors or unexpected issues
+    throw new Error("Failed to generate the listing. The AI service may be temporarily unavailable. Please try again later.");
   }
 };

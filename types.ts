@@ -40,3 +40,10 @@ export interface HistoryItem {
   listingData: GeneratedListing;
   timestamp: string;
 }
+
+export interface ApiKeys {
+  ebay: string;
+  x: string;
+  gemini: string;
+  openai: string;
+}
