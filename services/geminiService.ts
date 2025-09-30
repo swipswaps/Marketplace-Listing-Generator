@@ -1,14 +1,19 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Platform, ImageFile, GeneratedListing } from '../types';
 
+interface VerificationResult {
+  success: boolean;
+  message?: string;
+}
+
 /**
  * Performs a lightweight check to verify if the provided Gemini API key is valid.
  * @param apiKey The Google Gemini API key to verify.
- * @returns A promise that resolves to `true` if the key is valid, otherwise `false`.
+ * @returns A promise that resolves to an object with a `success` boolean and an optional error `message`.
  */
-export const verifyApiKey = async (apiKey: string): Promise<boolean> => {
+export const verifyApiKey = async (apiKey: string): Promise<VerificationResult> => {
   if (!apiKey) {
-    return false;
+    return { success: false, message: "API key cannot be empty." };
   }
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -17,11 +22,23 @@ export const verifyApiKey = async (apiKey: string): Promise<boolean> => {
       model: "gemini-2.5-flash",
       contents: "hi",
     });
-    return true;
+    return { success: true };
   } catch (error) {
     console.error("API Key validation failed:", error);
-    // An error during this minimal call strongly suggests an invalid key or configuration issue.
-    return false;
+    if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('api key not valid')) {
+            return { success: false, message: "The provided Gemini API key is invalid or has been revoked. Please double-check the key." };
+        }
+        if (errorMessage.includes('billing')) {
+            return { success: false, message: "The API key seems valid, but billing is not enabled on the associated Google Cloud project. Please enable billing to proceed." };
+        }
+        if (errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+            return { success: false, message: "API key is valid, but you have exceeded your usage quota. Please check your Google Cloud account." };
+        }
+    }
+    // Generic fallback for network errors or other unexpected issues
+    return { success: false, message: "Could not verify the API key. Please check your network connection and try again." };
   }
 };
 

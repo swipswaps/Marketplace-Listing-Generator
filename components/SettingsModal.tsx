@@ -47,22 +47,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handleSave = async () => {
     setVerificationError(null);
+
+    // Only verify if a Gemini key is present.
     if (keys.gemini) {
         setIsVerifying(true);
-        try {
-            const isValid = await verifyApiKey(keys.gemini);
-            if (!isValid) {
-                setVerificationError("The provided Gemini API key appears to be invalid. Please check the key and try again.");
-                setIsVerifying(false);
-                return;
-            }
-        } catch (error) {
-             setVerificationError("Failed to verify the API key. Please check your connection.");
-             setIsVerifying(false);
-             return;
+        const verificationResult = await verifyApiKey(keys.gemini);
+        setIsVerifying(false); // Stop spinner after verification attempt.
+
+        if (!verificationResult.success) {
+            setVerificationError(verificationResult.message || "An unknown verification error occurred.");
+            return; // Stop the save process if verification fails.
         }
     }
     
+    // If verification passes (or if gemini key is empty), save and close.
     onSave(keys);
     onClose();
   };
