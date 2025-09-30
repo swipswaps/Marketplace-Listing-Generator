@@ -45,13 +45,13 @@ export const verifyApiKey = async (apiKey: string): Promise<VerificationResult> 
 const getPlatformInstructions = (platform: Platform): string => {
   switch (platform) {
     case Platform.Ebay:
-      return "For eBay, create a compelling title with relevant keywords (max 80 chars). Write a detailed, structured HTML description using paragraphs, bullet points with <li> tags, and bold text with <b> tags to highlight key features and condition. Include sections for 'Item Specifics', 'Condition', and 'Shipping Information'.";
+      return "For eBay, create a compelling title with relevant keywords (max 80 chars). Write a detailed, structured HTML description using paragraphs (<p>), bullet points (<ul> and <li> tags), and bold text (<b> tags) to highlight key features and condition. Include sections for 'Item Specifics', 'Condition', and 'Shipping Information'.";
     case Platform.Facebook:
-      return "For Facebook Marketplace, create a concise and friendly title. Write a clear, easy-to-read description using simple language and emojis. Focus on the item's benefits for a local buyer. Suggest 5-10 relevant tags.";
+      return "For Facebook Marketplace, create a concise and friendly title. Write a clear, conversational description using simple paragraphs (separated by newlines) and emojis to improve readability. Focus on the item's benefits for a local buyer. Do not use any HTML tags. The output should be plain text with line breaks. Suggest 5-10 relevant tags.";
     case Platform.Craigslist:
-      return "For Craigslist, create a straightforward, keyword-rich title. Write a simple text-based description. Emphasize the condition and price, and include a clear call to action for contacting the seller. Do not use any HTML formatting.";
+      return "For Craigslist, create a straightforward, keyword-rich title. Write a simple text-based description. Emphasize the condition and price, and include a clear call to action for contacting the seller. Strictly do not use any HTML formatting; use plain text and line breaks only.";
     case Platform.X:
-      return "For X.com (Twitter), create a very short, catchy post (under 280 characters) to sell this item. Use 3-5 relevant hashtags and emojis. Include a clear call to action, like 'DM to buy!'. State the price clearly.";
+      return "For X.com (Twitter), generate a complete tweet to sell this item. The entire tweet, including hashtags, emojis, price, and call-to-action, must be placed in the 'description' field and must not exceed 280 characters. The 'title' field should be a very short, attention-grabbing phrase (e.g., 'For Sale!'). Use 3-5 relevant hashtags within the description.";
     default:
       return "Generate a standard product listing.";
   }
@@ -104,16 +104,17 @@ export const generateListing = async (
   const responseSchema = {
     type: Type.OBJECT,
     properties: {
-      itemName: { type: Type.STRING },
-      suggestedPrice: { type: Type.STRING },
+      itemName: { type: Type.STRING, description: "The specific name of the item identified, e.g., '2021 Apple MacBook Pro 14-inch'." },
+      suggestedPrice: { type: Type.STRING, description: "A competitive price range for the item, e.g., '$1200 - $1400'." },
       listing: {
         type: Type.OBJECT,
         properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
+          title: { type: Type.STRING, description: "The listing title. Must follow platform-specific rules (e.g., max 80 chars for eBay, very short for X.com)." },
+          description: { type: Type.STRING, description: "The listing description. Format must match platform requirements (e.g., HTML for eBay, plain text for Craigslist, full tweet for X.com)." },
           tags: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
+            description: "An array of relevant keywords or tags for the listing (especially for Facebook Marketplace)."
           },
         },
         required: ["title", "description"],
