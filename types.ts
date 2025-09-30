@@ -10,7 +10,8 @@ export enum Platform {
 export interface PlatformInfo {
   id: Platform;
   name: string;
-  icon: JSX.Element;
+  // Fix: Use React.ReactElement instead of JSX.Element to resolve namespace issue.
+  icon: React.ReactElement;
 }
 
 export interface GeneratedListing {

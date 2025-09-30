@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { GeneratedListing, Platform } from '../types';
 
@@ -7,6 +6,8 @@ interface ListingPreviewProps {
   isLoading: boolean;
   error: string | null;
   platform: Platform;
+  onSave?: () => void;
+  isSaved?: boolean;
 }
 
 const CopyIcon: React.FC<{ copied: boolean }> = ({ copied }) => {
@@ -39,7 +40,7 @@ const CopyToClipboard: React.FC<{ text: string }> = ({ text }) => {
 };
 
 
-export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoading, error, platform }) => {
+export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoading, error, platform, onSave, isSaved }) => {
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -76,9 +77,27 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoadi
     }
     return (
       <div className="space-y-6 p-1">
-        <div>
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Identified Item</h3>
-            <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">{listing.itemName}</p>
+        <div className="flex justify-between items-start">
+            <div>
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Identified Item</h3>
+                <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">{listing.itemName}</p>
+            </div>
+             {onSave && (
+                <button
+                  onClick={onSave}
+                  disabled={isSaved}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    isSaved
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 cursor-default'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                  </svg>
+                  {isSaved ? 'Saved' : 'Save Listing'}
+                </button>
+            )}
         </div>
         <div>
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Suggested Price</h3>

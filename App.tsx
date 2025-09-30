@@ -4,10 +4,12 @@ import { PlatformSelector } from './components/PlatformSelector';
 import { InputArea } from './components/InputArea';
 import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
+import { SavedListings } from './components/SavedListings';
 import { Platform, GeneratedListing, ImageFile, HistoryItem } from './types';
 import { generateListing } from './services/geminiService';
 
 const APP_HISTORY_KEY = 'marketplaceListingHistory';
+const SAVED_LISTINGS_KEY = 'marketplaceSavedListings';
 
 const App: React.FC = () => {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
@@ -18,18 +20,25 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [savedListings, setSavedListings] = useState<HistoryItem[]>([]);
+  
   const [activeHistoryId, setActiveHistoryId] = useState<number | null>(null);
+  const [activeSavedId, setActiveSavedId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'history' | 'saved'>('history');
 
-  // Load history from localStorage on mount
+  // Load data from localStorage on mount
   useEffect(() => {
     try {
       const storedHistory = localStorage.getItem(APP_HISTORY_KEY);
-      if (storedHistory) {
-        setHistory(JSON.parse(storedHistory));
-      }
+      if (storedHistory) setHistory(JSON.parse(storedHistory));
     } catch (e) {
       console.error("Failed to parse history from localStorage", e);
-      localStorage.removeItem(APP_HISTORY_KEY);
+    }
+     try {
+      const storedSaved = localStorage.getItem(SAVED_LISTINGS_KEY);
+      if (storedSaved) setSavedListings(JSON.parse(storedSaved));
+    } catch (e) {
+      console.error("Failed to parse saved listings from localStorage", e);
     }
   }, []);
 
@@ -42,13 +51,13 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setGeneratedListing(null);
-    setActiveHistoryId(null); // Clear active history item on new generation
+    setActiveHistoryId(null);
+    setActiveSavedId(null);
 
     try {
       const result = await generateListing(selectedPlatform, textInput, imageFile ?? undefined);
       setGeneratedListing(result);
 
-      // Create and save new history item
       const newHistoryItem: HistoryItem = {
         id: Date.now(),
         platform: selectedPlatform,
@@ -58,38 +67,94 @@ const App: React.FC = () => {
       };
 
       setHistory(prevHistory => {
-        const updatedHistory = [newHistoryItem, ...prevHistory].slice(0, 50); // Limit history to 50 items
+        const updatedHistory = [newHistoryItem, ...prevHistory].slice(0, 50);
         localStorage.setItem(APP_HISTORY_KEY, JSON.stringify(updatedHistory));
         return updatedHistory;
       });
 
     } catch (e: unknown) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError('An unknown error occurred.');
-      }
+      if (e instanceof Error) setError(e.message);
+      else setError('An unknown error occurred.');
     } finally {
       setIsLoading(false);
     }
   }, [selectedPlatform, textInput, imageFile]);
 
-  // Handler to select a history item
   const handleHistorySelect = (item: HistoryItem) => {
     setActiveHistoryId(item.id);
-    // Restore the inputs for user convenience
+    setActiveSavedId(null);
     setSelectedPlatform(item.platform);
     setTextInput(item.input.text);
     setImageFile(item.input.image);
-    // Clear any current "live" generation data
     setGeneratedListing(null);
     setError(null);
   };
   
-  // Determine what to display in the preview
+  const handleSelectSavedListing = (item: HistoryItem) => {
+    setActiveSavedId(item.id);
+    setActiveHistoryId(null);
+    setSelectedPlatform(item.platform);
+    setTextInput(item.input.text);
+    setImageFile(item.input.image);
+    setGeneratedListing(null);
+    setError(null);
+  };
+
+  const handleSaveListing = useCallback(() => {
+    if (!generatedListing) return;
+
+    const itemToSave: HistoryItem = {
+      id: Date.now(),
+      platform: selectedPlatform,
+      input: { text: textInput, image: imageFile },
+      listingData: generatedListing,
+      timestamp: new Date().toISOString(),
+    };
+
+    setSavedListings(prevSaved => {
+        const updatedSaved = [itemToSave, ...prevSaved];
+        localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
+        return updatedSaved;
+    });
+  }, [generatedListing, selectedPlatform, textInput, imageFile]);
+
+  const handleDeleteListing = useCallback((itemId: number) => {
+    setSavedListings(prevSaved => {
+        const updatedSaved = prevSaved.filter(item => item.id !== itemId);
+        localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
+        return updatedSaved;
+    });
+    if (activeSavedId === itemId) {
+        setActiveSavedId(null);
+    }
+  }, [activeSavedId]);
+  
   const activeHistoryItem = history.find(item => item.id === activeHistoryId);
-  const listingToShow = activeHistoryItem ? activeHistoryItem.listingData : generatedListing;
-  const platformToShow = activeHistoryItem ? activeHistoryItem.platform : selectedPlatform;
+  const activeSavedItem = savedListings.find(item => item.id === activeSavedId);
+  
+  let listingToShow = generatedListing;
+  let platformToShow = selectedPlatform;
+  let isCurrentListingSaved = false;
+  
+  if (activeHistoryItem) {
+    listingToShow = activeHistoryItem.listingData;
+    platformToShow = activeHistoryItem.platform;
+  } else if (activeSavedItem) {
+    listingToShow = activeSavedItem.listingData;
+    platformToShow = activeSavedItem.platform;
+  }
+
+  if (generatedListing) {
+    isCurrentListingSaved = savedListings.some(item => 
+        item.listingData.listing.title === generatedListing.listing.title && 
+        item.listingData.listing.description === generatedListing.listing.description
+    );
+  }
+
+  const deselectItems = () => {
+    setActiveHistoryId(null);
+    setActiveSavedId(null);
+  };
 
   return (
     <div className="min-h-screen bg-light dark:bg-dark text-gray-900 dark:text-gray-100 font-sans">
@@ -101,28 +166,52 @@ const App: React.FC = () => {
               selectedPlatform={selectedPlatform}
               onPlatformChange={(platform) => {
                 setSelectedPlatform(platform);
-                setActiveHistoryId(null); // Deselect history when platform changes
+                deselectItems();
               }}
             />
             <InputArea
               text={textInput}
               onTextChange={(text) => {
                 setTextInput(text);
-                setActiveHistoryId(null); // Deselect history when input changes
+                deselectItems();
               }}
               image={imageFile}
               onImageChange={(image) => {
                 setImageFile(image);
-                setActiveHistoryId(null); // Deselect history when input changes
+                deselectItems();
               }}
               onGenerate={handleGenerate}
               isLoading={isLoading}
             />
-            <HistoryList
-              history={history}
-              onSelect={handleHistorySelect}
-              activeItemId={activeHistoryId}
-            />
+            
+            {(history.length > 0 || savedListings.length > 0) && (
+              <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6">
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+                  <button onClick={() => setActiveTab('history')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'history' ? 'border-b-2 border-primary text-primary dark:border-secondary dark:text-secondary' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}>
+                    History
+                  </button>
+                  <button onClick={() => setActiveTab('saved')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'saved' ? 'border-b-2 border-primary text-primary dark:border-secondary dark:text-secondary' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}>
+                    Saved ({savedListings.length})
+                  </button>
+                </div>
+
+                {activeTab === 'history' ? (
+                   <HistoryList
+                    history={history}
+                    onSelect={handleHistorySelect}
+                    activeItemId={activeHistoryId}
+                  />
+                ) : (
+                  <SavedListings
+                    listings={savedListings}
+                    onSelect={handleSelectSavedListing}
+                    onDelete={handleDeleteListing}
+                    activeItemId={activeSavedId}
+                  />
+                )}
+              </div>
+            )}
+
           </div>
           <div className="lg:sticky top-8 self-start">
              <ListingPreview 
@@ -130,6 +219,8 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 error={error}
                 platform={platformToShow}
+                onSave={generatedListing && !activeHistoryItem && !activeSavedItem ? handleSaveListing : undefined}
+                isSaved={isCurrentListingSaved}
             />
           </div>
         </div>
