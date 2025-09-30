@@ -27,6 +27,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [visibility, setVisibility] = useState({ gemini: false, openai: false, ebay: false, x: false });
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof ApiKeys, string>>>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -34,6 +35,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       setVisibility({ gemini: false, openai: false, ebay: false, x: false });
       setVerificationError(null);
       setIsVerifying(false);
+      setErrors({});
     }
   }, [initialKeys, isOpen]);
 
@@ -44,30 +46,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const toggleVisibility = (key: keyof typeof visibility) => {
     setVisibility(prev => ({ ...prev, [key]: !prev[key] }));
   };
+  
+  const validateKeys = (keysToValidate: ApiKeys): boolean => {
+      const newErrors: Partial<Record<keyof ApiKeys, string>> = {};
+
+      // Gemini (required)
+      if (!keysToValidate.gemini.trim()) {
+        newErrors.gemini = 'Gemini API key is required.';
+      } else if (keysToValidate.gemini.length < 35) {
+        newErrors.gemini = 'Invalid format. Gemini keys are typically longer.';
+      }
+
+      // OpenAI (optional)
+      if (keysToValidate.openai.trim() && !keysToValidate.openai.startsWith('sk-')) {
+          newErrors.openai = 'Invalid format. OpenAI keys usually start with "sk-".';
+      } else if (keysToValidate.openai.trim() && keysToValidate.openai.length < 40) {
+        newErrors.openai = 'Invalid format. OpenAI keys are typically much longer.';
+      }
+
+      // eBay (optional)
+      if (keysToValidate.ebay.trim() && keysToValidate.ebay.length < 20) {
+        newErrors.ebay = 'Invalid format. Key seems too short.';
+      }
+
+      // X.com (optional)
+      if (keysToValidate.x.trim() && keysToValidate.x.length < 25) {
+        newErrors.x = 'Invalid format. Key seems too short.';
+      }
+
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0; // Returns true if no errors
+    };
+
 
   const handleSave = async () => {
     setVerificationError(null);
 
-    // Only verify if a Gemini key is present.
+    const isClientValid = validateKeys(keys);
+    if (!isClientValid) {
+        return; // Stop if local validation fails
+    }
+
     if (keys.gemini) {
         setIsVerifying(true);
         const verificationResult = await verifyApiKey(keys.gemini);
-        setIsVerifying(false); // Stop spinner after verification attempt.
+        setIsVerifying(false);
 
         if (!verificationResult.success) {
             setVerificationError(verificationResult.message || "An unknown verification error occurred.");
-            return; // Stop the save process if verification fails.
+            return;
         }
     }
     
-    // If verification passes (or if gemini key is empty), save and close.
     onSave(keys);
     onClose();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
-    setKeys(prevKeys => ({ ...prevKeys, [id]: value }));
+    const keyId = id as keyof ApiKeys;
+    setKeys(prevKeys => ({ ...prevKeys, [keyId]: value }));
+    // Clear specific error on change
+    if (errors[keyId]) {
+        setErrors(prevErrors => {
+          const newErrors = { ...prevErrors };
+          delete newErrors[keyId];
+          return newErrors;
+        });
+    }
+     if (keyId === 'gemini') {
+        setVerificationError(null);
+    }
   };
 
   return (
@@ -93,13 +142,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   value={keys.gemini}
                   onChange={handleChange}
                   placeholder="Enter your Gemini API key"
-                  className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  className={`block w-full px-3 py-2 bg-white dark:bg-gray-700 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm ${errors.gemini || verificationError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
                 <button type="button" onClick={() => toggleVisibility('gemini')} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label={visibility.gemini ? 'Hide key' : 'Show key'}>
                     {visibility.gemini ? <EyeSlashIcon /> : <EyeIcon />}
                 </button>
             </div>
-            {verificationError && <p className="mt-1 text-xs text-red-500">{verificationError}</p>}
+            {errors.gemini && <p className="mt-1 text-xs text-red-500">{errors.gemini}</p>}
+            {verificationError && !errors.gemini && <p className="mt-1 text-xs text-red-500">{verificationError}</p>}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Required for all AI listing generation.</p>
           </div>
            <div>
@@ -111,12 +161,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   value={keys.openai}
                   onChange={handleChange}
                   placeholder="Enter your OpenAI API key"
-                  className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  className={`block w-full px-3 py-2 bg-white dark:bg-gray-700 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm ${errors.openai ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
                 <button type="button" onClick={() => toggleVisibility('openai')} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label={visibility.openai ? 'Hide key' : 'Show key'}>
                     {visibility.openai ? <EyeSlashIcon /> : <EyeIcon />}
                 </button>
             </div>
+             {errors.openai && <p className="mt-1 text-xs text-red-500">{errors.openai}</p>}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional, for future use with ChatGPT models.</p>
           </div>
            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
@@ -129,12 +180,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                       value={keys.ebay}
                       onChange={handleChange}
                       placeholder="Enter your eBay API key"
-                      className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      className={`block w-full px-3 py-2 bg-white dark:bg-gray-700 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm ${errors.ebay ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                     />
                     <button type="button" onClick={() => toggleVisibility('ebay')} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label={visibility.ebay ? 'Hide key' : 'Show key'}>
                         {visibility.ebay ? <EyeSlashIcon /> : <EyeIcon />}
                     </button>
                 </div>
+                 {errors.ebay && <p className="mt-1 text-xs text-red-500">{errors.ebay}</p>}
                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional, for fetching real-time pricing data.</p>
               </div>
               <div>
@@ -146,12 +198,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                       value={keys.x}
                       onChange={handleChange}
                       placeholder="Enter your X.com API key"
-                      className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      className={`block w-full px-3 py-2 bg-white dark:bg-gray-700 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm ${errors.x ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                     />
                     <button type="button" onClick={() => toggleVisibility('x')} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label={visibility.x ? 'Hide key' : 'Show key'}>
                         {visibility.x ? <EyeSlashIcon /> : <EyeIcon />}
                     </button>
                 </div>
+                 {errors.x && <p className="mt-1 text-xs text-red-500">{errors.x}</p>}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional, for posting listings directly to X.com.</p>
               </div>
            </div>
