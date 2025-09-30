@@ -73,7 +73,6 @@ export const generateListing = async (
           tags: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
-            nullable: true
           },
         },
         required: ["title", "description"],

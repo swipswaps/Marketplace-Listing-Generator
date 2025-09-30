@@ -1,4 +1,3 @@
-// Fix: Import React to resolve JSX namespace error.
 import React from 'react';
 
 export enum Platform {
@@ -28,4 +27,15 @@ export interface ImageFile {
   base64: string;
   mimeType: string;
   name: string;
+}
+
+export interface HistoryItem {
+  id: number;
+  platform: Platform;
+  input: {
+    text: string;
+    image: ImageFile | null;
+  };
+  listingData: GeneratedListing;
+  timestamp: string;
 }
