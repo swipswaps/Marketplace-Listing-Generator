@@ -74,26 +74,36 @@ const buildPrompt = (platform: Platform, text: string, image?: ImageFile): any[]
     I want to create a listing for ${platform}.
     ${text ? `Based on the following user description: "${text}".` : ""}
     
-    Your task is to act as an expert e-commerce market analyst. Your analysis must be thorough.
+    Your task is to act as an expert e-commerce market analyst. Your analysis must be extremely thorough and follow these steps precisely:
 
-    1.  **Analyze Image Details (If an image is provided):**
-        - Meticulously examine the image for any text, labels, barcodes, SKUs, ASINs, or model numbers. **This information is the highest priority for accurate identification.**
-        - Identify visual attributes like the item's primary color, material (e.g., leather, plastic, wood), style, and any visible signs of wear, damage, or unique features.
+    1.  **Primary Data Extraction (Highest Priority):**
+        - If an image is provided, your absolute first step is to perform Optical Character Recognition (OCR) and barcode scanning on it.
+        - Meticulously search for and extract any and all text, including brand names, model numbers, serial numbers, SKUs, ASINs, UPCs, or any other identifiers printed on the item or its packaging.
+        - If you find a barcode, decode it and identify the product. This data is the most reliable source of truth.
+        - **This step is non-negotiable. The accuracy of the entire listing depends on successfully extracting this information.**
 
-    2.  **Identify Item:** Using the user's text and your detailed image analysis, identify the item. Be as specific as possible (e.g., 'Used Sony WH-1000XM4 Wireless Noise Cancelling Headphones in Silver, model WH1000XM4/S'). Use the information from barcodes, labels, and model numbers first and foremost.
+    2.  **Visual Attribute Analysis:**
+        - Identify the item's primary color(s), material (e.g., leather, plastic, metal, wood), texture, style, and any other distinctive visual features.
+        - Note any visible signs of condition, such as wear, scratches, dents, or if it appears new or in its original packaging.
 
-    3.  **Analyze Pricing:** Analyze the current market on ${platform} for this item. Look for recently sold listings in similar condition to provide a data-driven price suggestion.
+    3.  **Synthesize Item Identity:**
+        - Using the extracted data from Step 1 as your primary source, and supplementing with the visual analysis from Step 2 and the user's text, determine the exact identity of the item.
+        - The resulting 'itemName' must be as specific as possible. For example, instead of "Headphones", it should be "Used Sony WH-1000XM4 Wireless Noise Cancelling Headphones in Silver, model WH1000XM4/S". Prioritize model numbers and specific identifiers you found.
 
-    4.  **Provide Price Details:** In the 'suggestedPrice' object:
-        - 'range': A competitive price range (e.g., "$200 - $250").
-        - 'analysis': A brief (1-2 sentences) explanation of your pricing, e.g., "Based on recently sold listings for this model in 'used' condition."
-        - 'confidence': A score ('High', 'Medium', or 'Low') based on how much data was available for your analysis.
+    4.  **Market-Driven Price Analysis:**
+        - Based on the precise item identity, research the current market for this item on ${platform}.
+        - Analyze recently sold listings in a similar condition to provide a data-driven price suggestion.
+        - In the 'suggestedPrice' object, provide:
+            - 'range': A competitive price range (e.g., "$200 - $250").
+            - 'analysis': A brief (1-2 sentences) justification, e.g., "Based on 5 recently sold listings for this model in 'used' condition on eBay."
+            - 'confidence': A score ('High', 'Medium', or 'Low') based on the volume and quality of pricing data available.
 
-    5.  **Generate Listing:** Generate a complete listing optimized for ${platform}, incorporating all the identified details (model, color, material, condition) into the title and description to make it as compelling and accurate as possible.
+    5.  **Generate Optimized Listing:**
+        - Generate a complete listing specifically optimized for ${platform}.
+        - **Crucially, you must incorporate all the specific details you identified** (model number, color, material, condition) into both the title and description to maximize accuracy and appeal.
+        - Follow these platform-specific instructions: ${platformInstructions}
     
-    6.  ${platformInstructions}
-    
-    Return ONLY a valid JSON object matching the provided schema. Do not include markdown formatting or any text before or after the JSON object.
+    Return ONLY a valid JSON object that strictly adheres to the provided schema. Do not include any markdown formatting, explanatory text, or anything outside the JSON structure.
   `;
 
   parts.push({ text: userTextPrompt });
@@ -157,8 +167,14 @@ export const generateListing = async (
     });
 
     const jsonText = response.text.trim();
-    const parsedJson = JSON.parse(jsonText);
-    
+    let parsedJson;
+    try {
+      parsedJson = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error("Failed to parse JSON from API response:", jsonText);
+      throw new Error("The AI returned an invalid response format. Please try generating the listing again.");
+    }
+
     if (!parsedJson.listing || !parsedJson.listing.title) {
         throw new Error("Invalid JSON structure received from API.");
     }

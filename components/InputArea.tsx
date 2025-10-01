@@ -25,7 +25,7 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-export const InputArea: React.FC<InputAreaProps> = ({
+export const InputArea: React.FC<InputAreaProps> = React.memo(({
   text,
   onTextChange,
   image,
@@ -146,4 +146,4 @@ export const InputArea: React.FC<InputAreaProps> = ({
       </button>
     </div>
   );
-};
+});

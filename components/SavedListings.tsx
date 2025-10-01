@@ -9,7 +9,7 @@ interface SavedListingsProps {
   activeItemId: number | null;
 }
 
-export const SavedListings: React.FC<SavedListingsProps> = ({ listings, onSelect, onDelete, activeItemId }) => {
+export const SavedListings: React.FC<SavedListingsProps> = React.memo(({ listings, onSelect, onDelete, activeItemId }) => {
   if (listings.length === 0) {
     return (
         <div className="text-center py-10">
@@ -75,4 +75,4 @@ export const SavedListings: React.FC<SavedListingsProps> = ({ listings, onSelect
       })}
     </div>
   );
-};
+});

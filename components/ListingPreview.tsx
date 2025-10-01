@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GeneratedListing, HistoryListing, Platform, PriceAnalysis } from '../types';
 
 interface ListingPreviewProps {
@@ -9,6 +9,14 @@ interface ListingPreviewProps {
   onSave?: () => void;
   isSaved?: boolean;
 }
+
+const LOADING_MESSAGES = [
+  "The AI is analyzing your product...",
+  "Consulting market data for pricing...",
+  "Crafting the perfect description...",
+  "Identifying key features and specs...",
+  "Almost there, finalizing the details...",
+];
 
 const CopyIcon: React.FC<{ copied: boolean }> = ({ copied }) => {
   return copied ? (
@@ -53,7 +61,22 @@ const ConfidenceBadge: React.FC<{ confidence: 'High' | 'Medium' | 'Low' }> = ({ 
 };
 
 
-export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoading, error, platform, onSave, isSaved }) => {
+export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved }) => {
+  const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
+
+  useEffect(() => {
+    if (isLoading) {
+      const interval = setInterval(() => {
+        setLoadingMessage(prev => {
+          const currentIndex = LOADING_MESSAGES.indexOf(prev);
+          const nextIndex = (currentIndex + 1) % LOADING_MESSAGES.length;
+          return LOADING_MESSAGES[nextIndex];
+        });
+      }, 2500);
+      return () => clearInterval(interval);
+    }
+  }, [isLoading]);
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -62,7 +85,7 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoadi
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-300">Generating your listing...</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">The AI is analyzing your product. This may take a moment.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{loadingMessage}</p>
         </div>
       );
     }
@@ -175,4 +198,4 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoadi
       {renderContent()}
     </div>
   );
-};
+});

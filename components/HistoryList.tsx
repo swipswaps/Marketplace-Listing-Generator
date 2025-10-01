@@ -8,7 +8,7 @@ interface HistoryListProps {
   activeItemId: number | null;
 }
 
-export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, activeItemId }) => {
+export const HistoryList: React.FC<HistoryListProps> = React.memo(({ history, onSelect, activeItemId }) => {
   if (history.length === 0) {
     return (
         <div className="text-center py-10">
@@ -61,4 +61,4 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, act
       })}
     </div>
   );
-};
+});

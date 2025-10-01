@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Platform, PlatformInfo } from '../types';
 import { PLATFORMS } from '../constants';
@@ -8,7 +7,7 @@ interface PlatformSelectorProps {
   onPlatformChange: (platform: Platform) => void;
 }
 
-export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
+export const PlatformSelector: React.FC<PlatformSelectorProps> = React.memo(({
   selectedPlatform,
   onPlatformChange,
 }) => {
@@ -39,4 +38,4 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
       </div>
     </div>
   );
-};
+});

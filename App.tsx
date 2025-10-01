@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { PlatformSelector } from './components/PlatformSelector';
 import { InputArea } from './components/InputArea';
@@ -105,7 +105,7 @@ const App: React.FC = () => {
     }
   }, [selectedPlatform, textInput, imageFile, apiKeys.gemini]);
 
-  const handleHistorySelect = (item: HistoryItem) => {
+  const handleHistorySelect = useCallback((item: HistoryItem) => {
     setActiveHistoryId(item.id);
     setActiveSavedId(null);
     setSelectedPlatform(item.platform);
@@ -113,9 +113,9 @@ const App: React.FC = () => {
     setImageFile(item.input.image);
     setGeneratedListing(null);
     setError(null);
-  };
+  }, []);
   
-  const handleSelectSavedListing = (item: HistoryItem) => {
+  const handleSelectSavedListing = useCallback((item: HistoryItem) => {
     setActiveSavedId(item.id);
     setActiveHistoryId(null);
     setSelectedPlatform(item.platform);
@@ -123,7 +123,7 @@ const App: React.FC = () => {
     setImageFile(item.input.image);
     setGeneratedListing(null);
     setError(null);
-  };
+  }, []);
 
   const handleSaveListing = useCallback(() => {
     if (!generatedListing) return;
@@ -144,43 +144,61 @@ const App: React.FC = () => {
   }, [generatedListing, selectedPlatform, textInput, imageFile]);
 
   const handleDeleteListing = useCallback((itemId: number) => {
-    setSavedListings(prevSaved => {
-        const updatedSaved = prevSaved.filter(item => item.id !== itemId);
-        localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
-        return updatedSaved;
-    });
-    if (activeSavedId === itemId) {
-        setActiveSavedId(null);
+    if (window.confirm("Are you sure you want to delete this saved listing? This action cannot be undone.")) {
+      setSavedListings(prevSaved => {
+          const updatedSaved = prevSaved.filter(item => item.id !== itemId);
+          localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
+          return updatedSaved;
+      });
+      if (activeSavedId === itemId) {
+          setActiveSavedId(null);
+      }
     }
   }, [activeSavedId]);
   
-  const activeHistoryItem = history.find(item => item.id === activeHistoryId);
-  const activeSavedItem = savedListings.find(item => item.id === activeSavedId);
-  
-  // Fix: Explicitly type `listingToShow` to handle both new `GeneratedListing` and `HistoryListing` from storage.
-  let listingToShow: HistoryListing | null = generatedListing;
-  let platformToShow = selectedPlatform;
-  let isCurrentListingSaved = false;
-  
-  if (activeHistoryItem) {
-    listingToShow = activeHistoryItem.listingData;
-    platformToShow = activeHistoryItem.platform;
-  } else if (activeSavedItem) {
-    listingToShow = activeSavedItem.listingData;
-    platformToShow = activeSavedItem.platform;
-  }
+  const { listingToShow, platformToShow } = useMemo(() => {
+    const activeHistoryItem = history.find(item => item.id === activeHistoryId);
+    if (activeHistoryItem) {
+      return { listingToShow: activeHistoryItem.listingData, platformToShow: activeHistoryItem.platform };
+    }
 
-  if (generatedListing) {
-    isCurrentListingSaved = savedListings.some(item => 
+    const activeSavedItem = savedListings.find(item => item.id === activeSavedId);
+    if (activeSavedItem) {
+      return { listingToShow: activeSavedItem.listingData, platformToShow: activeSavedItem.platform };
+    }
+
+    return { listingToShow: generatedListing as HistoryListing | null, platformToShow: selectedPlatform };
+  }, [activeHistoryId, activeSavedId, generatedListing, history, savedListings, selectedPlatform]);
+
+
+  const isCurrentListingSaved = useMemo(() => {
+    if (!generatedListing) return false;
+    return savedListings.some(item => 
         item.listingData.listing.title === generatedListing.listing.title && 
         item.listingData.listing.description === generatedListing.listing.description
     );
-  }
+  }, [generatedListing, savedListings]);
 
-  const deselectItems = () => {
+  const deselectItems = useCallback(() => {
     setActiveHistoryId(null);
     setActiveSavedId(null);
-  };
+  }, []);
+
+  const onPlatformChange = useCallback((platform: Platform) => {
+    setSelectedPlatform(platform);
+    deselectItems();
+  }, [deselectItems]);
+
+  const onTextChange = useCallback((text: string) => {
+    setTextInput(text);
+    deselectItems();
+  }, [deselectItems]);
+
+  const onImageChange = useCallback((image: ImageFile | null) => {
+    setImageFile(image);
+    deselectItems();
+  }, [deselectItems]);
+
 
   return (
     <div className="min-h-screen bg-light dark:bg-dark text-gray-900 dark:text-gray-100 font-sans">
@@ -190,22 +208,13 @@ const App: React.FC = () => {
           <div className="flex flex-col space-y-6">
             <PlatformSelector
               selectedPlatform={selectedPlatform}
-              onPlatformChange={(platform) => {
-                setSelectedPlatform(platform);
-                deselectItems();
-              }}
+              onPlatformChange={onPlatformChange}
             />
             <InputArea
               text={textInput}
-              onTextChange={(text) => {
-                setTextInput(text);
-                deselectItems();
-              }}
+              onTextChange={onTextChange}
               image={imageFile}
-              onImageChange={(image) => {
-                setImageFile(image);
-                deselectItems();
-              }}
+              onImageChange={onImageChange}
               onGenerate={handleGenerate}
               isLoading={isLoading}
             />
@@ -245,7 +254,7 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 error={error}
                 platform={platformToShow}
-                onSave={generatedListing && !activeHistoryItem && !activeSavedItem ? handleSaveListing : undefined}
+                onSave={generatedListing && !activeHistoryId && !activeSavedId ? handleSaveListing : undefined}
                 isSaved={isCurrentListingSaved}
             />
           </div>
