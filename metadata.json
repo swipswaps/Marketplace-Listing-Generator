@@ -1,5 +1,7 @@
 {
   "name": "AI Marketplace Listing Generator",
   "description": "An AI-powered tool to automatically generate optimized product listings for eBay, Facebook Marketplace, Craigslist, and X.com (formerly Twitter) from an image or text description. It uses Gemini to analyze the product and suggest pricing based on market trends.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
