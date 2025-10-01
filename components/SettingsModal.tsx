@@ -58,10 +58,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       }
 
       // OpenAI (optional)
-      if (keysToValidate.openai.trim() && !keysToValidate.openai.startsWith('sk-')) {
-          newErrors.openai = 'Invalid format. OpenAI keys usually start with "sk-".';
-      } else if (keysToValidate.openai.trim() && keysToValidate.openai.length < 40) {
-        newErrors.openai = 'Invalid format. OpenAI keys are typically much longer.';
+      const openaiKey = keysToValidate.openai.trim();
+      if (openaiKey) {
+        if (!openaiKey.startsWith('sk-')) {
+          newErrors.openai = 'Invalid format. OpenAI keys must start with "sk-".';
+        } else if (openaiKey.length < 40) {
+          newErrors.openai = 'Invalid format. Key is too short for an OpenAI key.';
+        }
       }
 
       // eBay (optional)

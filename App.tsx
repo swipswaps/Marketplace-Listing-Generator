@@ -6,7 +6,8 @@ import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
 import { SavedListings } from './components/SavedListings';
 import { SettingsModal } from './components/SettingsModal';
-import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys } from './types';
+// Fix: Import `HistoryListing` to use it as a type for `listingToShow`.
+import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing } from './types';
 import { generateListing } from './services/geminiService';
 
 const APP_HISTORY_KEY = 'marketplaceListingHistory';
@@ -156,7 +157,8 @@ const App: React.FC = () => {
   const activeHistoryItem = history.find(item => item.id === activeHistoryId);
   const activeSavedItem = savedListings.find(item => item.id === activeSavedId);
   
-  let listingToShow = generatedListing;
+  // Fix: Explicitly type `listingToShow` to handle both new `GeneratedListing` and `HistoryListing` from storage.
+  let listingToShow: HistoryListing | null = generatedListing;
   let platformToShow = selectedPlatform;
   let isCurrentListingSaved = false;
   

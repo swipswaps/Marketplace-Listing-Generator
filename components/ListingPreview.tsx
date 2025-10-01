@@ -1,8 +1,8 @@
 import React from 'react';
-import { GeneratedListing, Platform } from '../types';
+import { GeneratedListing, HistoryListing, Platform, PriceAnalysis } from '../types';
 
 interface ListingPreviewProps {
-  listing: GeneratedListing | null;
+  listing: HistoryListing | null;
   isLoading: boolean;
   error: string | null;
   platform: Platform;
@@ -17,7 +17,7 @@ const CopyIcon: React.FC<{ copied: boolean }> = ({ copied }) => {
     </svg>
   ) : (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400 group-hover:text-primary">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v3.75m-8.166-4.388a2.25 2.25 0 012.166-1.638h3c1.03 0 1.9.693 2.166 1.638m0 0C14.155 4.302 14 4.655 14 5v3.75m-8.166-4.388c-.055.194-.084.4-.084.612v3.75m0 0a2.25 2.25 0 002.25 2.25h3.75a2.25 2.25 0 002.25-2.25V5.25a2.25 2.25 0 00-2.25-2.25h-3.75a2.25 2.25 0 00-2.25 2.25z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v3.75m-8.166-4.388a2.25 2.25 0 012.166-1.638h3c1.03 0 1.9.693 2.166 1.638m0 0C14.155 4.302 14 4.655 14 5v3.75m-8.166-4.388c-.055.194-.084.4-.084.612v3.75m0 0a2.25 2.25 0 002.25 2.25h3.75a2.25 2.25 0 002.25-2.25V5.25a2.25 2.25 0 00-2.25-2.25h-3.75a2.25 2.25 0 00-2.25-2.25z" />
     </svg>
   );
 };
@@ -37,6 +37,19 @@ const CopyToClipboard: React.FC<{ text: string }> = ({ text }) => {
       <CopyIcon copied={copied} />
     </button>
   );
+};
+
+const ConfidenceBadge: React.FC<{ confidence: 'High' | 'Medium' | 'Low' }> = ({ confidence }) => {
+    const confidenceStyles = {
+        High: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+        Medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+        Low: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+    };
+    return (
+        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${confidenceStyles[confidence]}`}>
+            {confidence} Confidence
+        </span>
+    );
 };
 
 
@@ -75,6 +88,12 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoadi
         </div>
       );
     }
+
+    // Backward compatibility for old history items with string price
+    const priceInfo: PriceAnalysis = typeof listing.suggestedPrice === 'string'
+      ? { range: listing.suggestedPrice, analysis: 'No pricing analysis available for this older entry.', confidence: 'Medium' }
+      : listing.suggestedPrice;
+      
     return (
       <div className="space-y-6 p-1">
         <div className="flex justify-between items-start">
@@ -99,10 +118,19 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({ listing, isLoadi
                 </button>
             )}
         </div>
-        <div>
+        
+        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Suggested Price</h3>
-            <p className="text-lg font-semibold text-green-600 dark:text-green-400">{listing.suggestedPrice}</p>
+            <div className="flex items-baseline gap-4 mt-1">
+                <p className="text-xl font-semibold text-green-600 dark:text-green-400">{priceInfo.range}</p>
+                <ConfidenceBadge confidence={priceInfo.confidence} />
+            </div>
+             <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-2">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Price Analysis:</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 italic">{priceInfo.analysis}</p>
+            </div>
         </div>
+
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-4">
              <div>
                 <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Title</label>

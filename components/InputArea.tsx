@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { ImageFile } from '../types';
 
@@ -10,6 +9,8 @@ interface InputAreaProps {
   onGenerate: () => void;
   isLoading: boolean;
 }
+
+const MAX_TEXT_LENGTH = 1500;
 
 const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -60,7 +61,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
     handleFileChange(e.dataTransfer.files);
   };
   
-  const canGenerate = (text.trim().length > 0 || image) && !isLoading;
+  const isTextTooLong = text.length > MAX_TEXT_LENGTH;
+  const canGenerate = (text.trim().length > 0 || image) && !isLoading && !isTextTooLong;
 
   return (
     <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6 space-y-6">
@@ -100,13 +102,31 @@ export const InputArea: React.FC<InputAreaProps> = ({
             <div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div>
         </div>
         
-        <textarea
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          placeholder="Describe your item... (e.g., condition, brand, model)"
-          rows={4}
-          className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:focus:ring-secondary focus:border-transparent dark:bg-gray-700 dark:text-gray-200"
-        />
+        <div>
+          <textarea
+            value={text}
+            onChange={(e) => onTextChange(e.target.value)}
+            placeholder="Describe your item... (e.g., condition, brand, model)"
+            rows={4}
+            className={`w-full p-3 border rounded-lg focus:ring-2 focus:border-transparent dark:bg-gray-700 dark:text-gray-200 transition-colors ${
+              isTextTooLong
+                ? 'border-red-500 focus:ring-red-500'
+                : 'border-gray-300 dark:border-gray-600 focus:ring-primary dark:focus:ring-secondary'
+            }`}
+            aria-describedby="text-feedback"
+            aria-invalid={isTextTooLong}
+          />
+          <div id="text-feedback" className="flex justify-between items-center mt-1 text-xs">
+            {isTextTooLong ? (
+              <p className="text-red-500 font-medium">Description is too long.</p>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">Provide specific details for the best results.</p>
+            )}
+            <span className={isTextTooLong ? 'text-red-500 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              {text.length}/{MAX_TEXT_LENGTH}
+            </span>
+          </div>
+        </div>
       </div>
 
       <button

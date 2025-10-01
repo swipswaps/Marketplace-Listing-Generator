@@ -74,11 +74,24 @@ const buildPrompt = (platform: Platform, text: string, image?: ImageFile): any[]
     I want to create a listing for ${platform}.
     ${text ? `Based on the following user description: "${text}".` : ""}
     
-    Your task is to:
-    1.  Identify the item from the image and/or description. Be as specific as possible (e.g., '2021 Apple MacBook Pro 14-inch with M1 Pro chip, 16GB RAM, 512GB SSD, Space Gray').
-    2.  Based on current market trends for similar sold items, suggest a competitive price range (e.g., "$1200 - $1400").
-    3.  Generate a complete listing optimized for ${platform}.
-    4.  ${platformInstructions}
+    Your task is to act as an expert e-commerce market analyst. Your analysis must be thorough.
+
+    1.  **Analyze Image Details (If an image is provided):**
+        - Meticulously examine the image for any text, labels, barcodes, SKUs, ASINs, or model numbers. **This information is the highest priority for accurate identification.**
+        - Identify visual attributes like the item's primary color, material (e.g., leather, plastic, wood), style, and any visible signs of wear, damage, or unique features.
+
+    2.  **Identify Item:** Using the user's text and your detailed image analysis, identify the item. Be as specific as possible (e.g., 'Used Sony WH-1000XM4 Wireless Noise Cancelling Headphones in Silver, model WH1000XM4/S'). Use the information from barcodes, labels, and model numbers first and foremost.
+
+    3.  **Analyze Pricing:** Analyze the current market on ${platform} for this item. Look for recently sold listings in similar condition to provide a data-driven price suggestion.
+
+    4.  **Provide Price Details:** In the 'suggestedPrice' object:
+        - 'range': A competitive price range (e.g., "$200 - $250").
+        - 'analysis': A brief (1-2 sentences) explanation of your pricing, e.g., "Based on recently sold listings for this model in 'used' condition."
+        - 'confidence': A score ('High', 'Medium', or 'Low') based on how much data was available for your analysis.
+
+    5.  **Generate Listing:** Generate a complete listing optimized for ${platform}, incorporating all the identified details (model, color, material, condition) into the title and description to make it as compelling and accurate as possible.
+    
+    6.  ${platformInstructions}
     
     Return ONLY a valid JSON object matching the provided schema. Do not include markdown formatting or any text before or after the JSON object.
   `;
@@ -105,7 +118,16 @@ export const generateListing = async (
     type: Type.OBJECT,
     properties: {
       itemName: { type: Type.STRING, description: "The specific name of the item identified, e.g., '2021 Apple MacBook Pro 14-inch'." },
-      suggestedPrice: { type: Type.STRING, description: "A competitive price range for the item, e.g., '$1200 - $1400'." },
+      suggestedPrice: {
+        type: Type.OBJECT,
+        description: "A detailed pricing analysis.",
+        properties: {
+          range: { type: Type.STRING, description: "A competitive price range for the item, e.g., '$1200 - $1400'." },
+          analysis: { type: Type.STRING, description: "A brief explanation of the reasoning behind the suggested price." },
+          confidence: { type: Type.STRING, enum: ['High', 'Medium', 'Low'], description: "The confidence level of the pricing analysis." }
+        },
+        required: ["range", "analysis", "confidence"]
+      },
       listing: {
         type: Type.OBJECT,
         properties: {
