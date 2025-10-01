@@ -14,10 +14,18 @@ export interface PlatformInfo {
   icon: React.ReactElement;
 }
 
+export interface PriceDistributionBin {
+  range: string;
+  count: number;
+}
+
 export interface PriceAnalysis {
   range: string;
   analysis: string;
   confidence: 'High' | 'Medium' | 'Low';
+  comparableListingsCount: number;
+  averageListingAgeDays: number;
+  priceDistribution: PriceDistributionBin[];
 }
 
 export interface GeneratedListing {

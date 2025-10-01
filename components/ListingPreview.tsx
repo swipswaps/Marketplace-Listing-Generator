@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GeneratedListing, HistoryListing, Platform, PriceAnalysis, PriceHistoryPoint } from '../types';
+import { GeneratedListing, HistoryListing, Platform, PriceAnalysis, PriceHistoryPoint, PriceDistributionBin } from '../types';
 
 interface ListingPreviewProps {
   listing: HistoryListing | null;
@@ -158,6 +158,30 @@ const PriceHistoryChart: React.FC<{ data: PriceHistoryPoint[] }> = ({ data }) =>
     );
 };
 
+const PriceDistributionHistogram: React.FC<{ data: PriceDistributionBin[] }> = ({ data }) => {
+    if (!data || data.length === 0) return null;
+
+    const maxCount = Math.max(...data.map(bin => bin.count), 1); // Avoid division by zero
+    
+    return (
+        <div className="mt-2">
+            <div className="flex items-end justify-around gap-2 h-24 pt-2 border-t border-gray-200 dark:border-gray-700">
+                {data.map((bin, index) => (
+                    <div key={index} className="flex flex-col items-center justify-end flex-1 group relative h-full">
+                        <div 
+                            className="w-full bg-primary/20 dark:bg-secondary/20 rounded-t-sm hover:bg-primary/40 dark:hover:bg-secondary/40 transition-colors"
+                            style={{ height: `${(bin.count / maxCount) * 100}%` }}
+                        />
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">{bin.range}</span>
+                        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            {bin.count} listings
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved, priceHistory, isFetchingHistory }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
@@ -210,10 +234,20 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
       );
     }
 
-    // Backward compatibility for old history items with string price
+    // Default values for backward compatibility with old history items
+    const defaultPriceAnalysis: PriceAnalysis = {
+        range: 'N/A',
+        analysis: 'No pricing analysis available.',
+        confidence: 'Medium',
+        comparableListingsCount: 0,
+        averageListingAgeDays: 0,
+        priceDistribution: [],
+    };
+    
+    // Merge defaults with actual data, handling both old string format and incomplete objects
     const priceInfo: PriceAnalysis = typeof listing.suggestedPrice === 'string'
-      ? { range: listing.suggestedPrice, analysis: 'No pricing analysis available for this older entry.', confidence: 'Medium' }
-      : listing.suggestedPrice;
+      ? { ...defaultPriceAnalysis, range: listing.suggestedPrice, analysis: 'Price from older listing format.' }
+      : { ...defaultPriceAnalysis, ...listing.suggestedPrice };
       
     return (
       <div className="space-y-6 p-1">
@@ -255,11 +289,26 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                 </div>
             </div>
              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Price Analysis</label>
-                <div className="flex items-start gap-2 mt-1">
+                <div className="flex items-start gap-2">
                     <p className="flex-1 text-xs text-gray-500 dark:text-gray-400 italic">{priceInfo.analysis}</p>
                     <CopyToClipboard text={priceInfo.analysis} />
                 </div>
+                {(priceInfo.comparableListingsCount > 0 || priceInfo.averageListingAgeDays > 0) && (
+                    <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        {priceInfo.comparableListingsCount > 0 && (
+                            <span>Based on <strong>{priceInfo.comparableListingsCount}</strong> listings</span>
+                        )}
+                        {priceInfo.averageListingAgeDays > 0 && (
+                            <span>Avg. age: <strong>{priceInfo.averageListingAgeDays} days</strong></span>
+                        )}
+                    </div>
+                )}
+                {priceInfo.priceDistribution && priceInfo.priceDistribution.length > 0 && (
+                    <>
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-3 block">Price Distribution</label>
+                        <PriceDistributionHistogram data={priceInfo.priceDistribution} />
+                    </>
+                )}
             </div>
             {(isFetchingHistory || (priceHistory && priceHistory.length > 0)) && (
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-3">

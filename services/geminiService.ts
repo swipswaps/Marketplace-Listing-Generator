@@ -90,13 +90,16 @@ const buildPrompt = (platform: Platform, text: string, image?: ImageFile): any[]
         - Using the extracted data from Step 1 as your primary source, and supplementing with the visual analysis from Step 2 and the user's text, determine the exact identity of the item.
         - The resulting 'itemName' must be as specific as possible. For example, instead of "Headphones", it should be "Used Sony WH-1000XM4 Wireless Noise Cancelling Headphones in Silver, model WH1000XM4/S". Prioritize model numbers and specific identifiers you found.
 
-    4.  **Market-Driven Price Analysis:**
+    4.  **Market-Driven Price Analysis (Granular):**
         - Based on the precise item identity, research the current market for this item on ${platform}.
-        - Analyze recently sold listings in a similar condition to provide a data-driven price suggestion.
+        - Analyze recently sold and currently active listings in a similar condition to provide a data-driven price suggestion.
         - In the 'suggestedPrice' object, provide:
             - 'range': A competitive price range (e.g., "$200 - $250").
-            - 'analysis': A brief (1-2 sentences) justification, e.g., "Based on 5 recently sold listings for this model in 'used' condition on eBay."
+            - 'analysis': A brief (1-2 sentences) justification, e.g., "Based on recently sold listings for this model in 'used' condition."
             - 'confidence': A score ('High', 'Medium', or 'Low') based on the volume and quality of pricing data available.
+            - 'comparableListingsCount': The total number of comparable listings (sold and active) you found.
+            - 'averageListingAgeDays': The average age in days of the active comparable listings.
+            - 'priceDistribution': An array of 3 to 5 bins representing the price distribution of comparable listings. Each bin must be an object with 'range' (string, e.g., "$180-$200") and 'count' (number).
 
     5.  **Generate Optimized Listing:**
         - Generate a complete listing specifically optimized for ${platform}.
@@ -134,9 +137,23 @@ export const generateListing = async (
         properties: {
           range: { type: Type.STRING, description: "A competitive price range for the item, e.g., '$1200 - $1400'." },
           analysis: { type: Type.STRING, description: "A brief explanation of the reasoning behind the suggested price." },
-          confidence: { type: Type.STRING, enum: ['High', 'Medium', 'Low'], description: "The confidence level of the pricing analysis." }
+          confidence: { type: Type.STRING, enum: ['High', 'Medium', 'Low'], description: "The confidence level of the pricing analysis." },
+          comparableListingsCount: { type: Type.INTEGER, description: "The total number of comparable listings found." },
+          averageListingAgeDays: { type: Type.INTEGER, description: "The average age in days of active comparable listings." },
+          priceDistribution: {
+            type: Type.ARRAY,
+            description: "An array of bins for a price distribution histogram.",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                range: { type: Type.STRING, description: "The price range for this bin, e.g., '$180-$200'." },
+                count: { type: Type.INTEGER, description: "The number of listings in this price range." }
+              },
+              required: ["range", "count"]
+            }
+          }
         },
-        required: ["range", "analysis", "confidence"]
+        required: ["range", "analysis", "confidence", "comparableListingsCount", "averageListingAgeDays", "priceDistribution"]
       },
       listing: {
         type: Type.OBJECT,
