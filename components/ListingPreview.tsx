@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GeneratedListing, HistoryListing, Platform, PriceAnalysis } from '../types';
+import { GeneratedListing, HistoryListing, Platform, PriceAnalysis, PriceHistoryPoint } from '../types';
 
 interface ListingPreviewProps {
   listing: HistoryListing | null;
@@ -8,6 +8,8 @@ interface ListingPreviewProps {
   platform: Platform;
   onSave?: () => void;
   isSaved?: boolean;
+  priceHistory: PriceHistoryPoint[] | null;
+  isFetchingHistory: boolean;
 }
 
 const LOADING_MESSAGES = [
@@ -72,8 +74,89 @@ const ResourceLink: React.FC<{ href: string; icon: React.ReactElement; label: st
   </a>
 );
 
+const PriceHistoryChart: React.FC<{ data: PriceHistoryPoint[] }> = ({ data }) => {
+    const [activePoint, setActivePoint] = useState<PriceHistoryPoint | null>(null);
 
-export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved }) => {
+    const width = 400;
+    const height = 150;
+    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    const prices = data.map(d => d.price);
+    const minPrice = Math.min(...prices) * 0.95;
+    const maxPrice = Math.max(...prices) * 1.05;
+
+    const getX = (index: number) => margin.left + (index / (data.length - 1)) * chartWidth;
+    const getY = (price: number) => margin.top + chartHeight - ((price - minPrice) / (maxPrice - minPrice)) * chartHeight;
+
+    const pathData = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.price)}`).join(' ');
+    
+    const areaPathData = `${pathData} L ${getX(data.length - 1)} ${height - margin.bottom} L ${margin.left} ${height - margin.bottom} Z`;
+
+    const handleMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const index = Math.round(((mouseX - margin.left) / chartWidth) * (data.length - 1));
+        if(index >= 0 && index < data.length) {
+            setActivePoint(data[index]);
+        }
+    };
+    
+    return (
+        <div className="relative">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+                <defs>
+                    <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" className="text-primary/30 dark:text-secondary/30" stopColor="currentColor" />
+                        <stop offset="100%" className="text-primary/0 dark:text-secondary/0" stopColor="currentColor" />
+                    </linearGradient>
+                </defs>
+
+                {/* Y-Axis Labels */}
+                <text x={margin.left - 8} y={margin.top} dy="0.32em" textAnchor="end" className="text-xs fill-current text-gray-400">${maxPrice.toFixed(0)}</text>
+                <text x={margin.left - 8} y={height - margin.bottom} textAnchor="end" className="text-xs fill-current text-gray-400">${minPrice.toFixed(0)}</text>
+
+                {/* X-Axis Labels */}
+                <text x={margin.left} y={height - margin.bottom + 15} textAnchor="start" className="text-xs fill-current text-gray-400">30 days ago</text>
+                <text x={width - margin.right} y={height - margin.bottom + 15} textAnchor="end" className="text-xs fill-current text-gray-400">Today</text>
+
+                {/* Area Gradient */}
+                <path d={areaPathData} fill="url(#areaGradient)" />
+
+                {/* Line Path */}
+                <path d={pathData} fill="none" strokeWidth="2" className="stroke-current text-primary dark:text-secondary" />
+
+                {/* Tooltip Elements */}
+                {activePoint && (
+                    <g className="pointer-events-none">
+                        <line x1={getX(data.indexOf(activePoint))} y1={margin.top} x2={getX(data.indexOf(activePoint))} y2={height - margin.bottom} strokeWidth="1" className="stroke-current text-gray-400" strokeDasharray="3 3" />
+                        <circle cx={getX(data.indexOf(activePoint))} cy={getY(activePoint.price)} r="4" className="stroke-2 fill-white dark:fill-gray-800 stroke-primary dark:stroke-secondary" />
+                    </g>
+                )}
+                
+                {/* Interaction Rectangle */}
+                <rect 
+                    x={margin.left} 
+                    y={margin.top} 
+                    width={chartWidth} 
+                    height={chartHeight} 
+                    fill="transparent" 
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={() => setActivePoint(null)}
+                />
+            </svg>
+            {activePoint && (
+                <div className="absolute top-0 left-0 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none -translate-y-full" style={{ left: `${(data.indexOf(activePoint) / (data.length -1)) * 100}%`, transform: `translateX(-50%) translateY(-100%)` }}>
+                    ${activePoint.price.toFixed(2)} on {new Date(activePoint.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric'})}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved, priceHistory, isFetchingHistory }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
 
   useEffect(() => {
@@ -175,6 +258,28 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     <CopyToClipboard text={priceInfo.analysis} />
                 </div>
             </div>
+            {(isFetchingHistory || (priceHistory && priceHistory.length > 0)) && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Price History (Last 30 Days)</label>
+                    {isFetchingHistory ? (
+                        <div className="flex items-center justify-center h-24">
+                            <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    ) : (
+                        priceHistory && <PriceHistoryChart data={priceHistory} />
+                    )}
+                </div>
+            )}
+             {!isFetchingHistory && !priceHistory && onSave && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-center">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                        Price history chart unavailable. <a href="#" onClick={(e) => { e.preventDefault(); alert("Please go to Settings (⚙️) to add your eBay API key."); }} className="text-primary dark:text-secondary underline">Add an eBay API key</a> for this feature.
+                    </p>
+                </div>
+            )}
         </div>
 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-4">

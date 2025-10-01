@@ -59,3 +59,8 @@ export interface ApiKeys {
   gemini: string;
   openai: string;
 }
+
+export interface PriceHistoryPoint {
+  date: string;
+  price: number;
+}

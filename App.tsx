@@ -6,9 +6,9 @@ import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
 import { SavedListings } from './components/SavedListings';
 import { SettingsModal } from './components/SettingsModal';
-// Fix: Import `HistoryListing` to use it as a type for `listingToShow`.
-import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing } from './types';
+import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing, PriceHistoryPoint } from './types';
 import { generateListing } from './services/geminiService';
+import { fetchPriceHistory } from './services/ebayService';
 
 const APP_HISTORY_KEY = 'marketplaceListingHistory';
 const SAVED_LISTINGS_KEY = 'marketplaceSavedListings';
@@ -31,6 +31,9 @@ const App: React.FC = () => {
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeys>({ ebay: '', x: '', gemini: '', openai: '' });
+
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[] | null>(null);
+  const [isFetchingHistory, setIsFetchingHistory] = useState<boolean>(false);
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -76,6 +79,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setGeneratedListing(null);
+    setPriceHistory(null); // Clear previous chart data
     setActiveHistoryId(null);
     setActiveSavedId(null);
 
@@ -97,13 +101,23 @@ const App: React.FC = () => {
         return updatedHistory;
       });
 
+      // After successful generation, fetch price history if eBay key is available
+      if (apiKeys.ebay && result.itemName) {
+          setIsFetchingHistory(true);
+          fetchPriceHistory(result.itemName, apiKeys.ebay)
+            .then(data => setPriceHistory(data))
+            .catch(err => console.error("Failed to fetch price history", err))
+            .finally(() => setIsFetchingHistory(false));
+      }
+
+
     } catch (e: unknown) {
       if (e instanceof Error) setError(e.message);
       else setError('An unknown error occurred.');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedPlatform, textInput, imageFile, apiKeys.gemini]);
+  }, [selectedPlatform, textInput, imageFile, apiKeys.gemini, apiKeys.ebay]);
 
   const handleHistorySelect = useCallback((item: HistoryItem) => {
     setActiveHistoryId(item.id);
@@ -112,6 +126,7 @@ const App: React.FC = () => {
     setTextInput(item.input.text);
     setImageFile(item.input.image);
     setGeneratedListing(null);
+    setPriceHistory(null);
     setError(null);
   }, []);
   
@@ -122,6 +137,7 @@ const App: React.FC = () => {
     setTextInput(item.input.text);
     setImageFile(item.input.image);
     setGeneratedListing(null);
+    setPriceHistory(null);
     setError(null);
   }, []);
 
@@ -182,6 +198,7 @@ const App: React.FC = () => {
   const deselectItems = useCallback(() => {
     setActiveHistoryId(null);
     setActiveSavedId(null);
+    setPriceHistory(null);
   }, []);
 
   const onPlatformChange = useCallback((platform: Platform) => {
@@ -256,6 +273,8 @@ const App: React.FC = () => {
                 platform={platformToShow}
                 onSave={generatedListing && !activeHistoryId && !activeSavedId ? handleSaveListing : undefined}
                 isSaved={isCurrentListingSaved}
+                priceHistory={priceHistory}
+                isFetchingHistory={isFetchingHistory}
             />
           </div>
         </div>
