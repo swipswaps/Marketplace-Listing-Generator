@@ -60,6 +60,18 @@ const ConfidenceBadge: React.FC<{ confidence: 'High' | 'Medium' | 'Low' }> = ({ 
     );
 };
 
+const ResourceLink: React.FC<{ href: string; icon: React.ReactElement; label: string }> = ({ href, icon, label }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex items-center gap-3 p-3 bg-gray-100 dark:bg-gray-900/80 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700/60 transition-colors group"
+  >
+    <span className="text-gray-500 dark:text-gray-400 group-hover:text-primary dark:group-hover:text-secondary">{icon}</span>
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
+  </a>
+);
+
 
 export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
@@ -120,9 +132,12 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
     return (
       <div className="space-y-6 p-1">
         <div className="flex justify-between items-start">
-            <div>
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Identified Item</h3>
-                <p className="text-lg font-semibold text-gray-800 dark:text-gray-100">{listing.itemName}</p>
+            <div className="flex-1 pr-4">
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Identified Item</label>
+                <div className="flex items-center gap-2 mt-1">
+                    <p className="text-lg font-semibold text-gray-800 dark:text-gray-100 flex-1">{listing.itemName}</p>
+                    <CopyToClipboard text={listing.itemName} />
+                </div>
             </div>
              {onSave && (
                 <button
@@ -142,15 +157,23 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
             )}
         </div>
         
-        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Suggested Price</h3>
-            <div className="flex items-baseline gap-4 mt-1">
-                <p className="text-xl font-semibold text-green-600 dark:text-green-400">{priceInfo.range}</p>
-                <ConfidenceBadge confidence={priceInfo.confidence} />
+        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-3">
+            <div>
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Suggested Price</label>
+                <div className="flex items-center gap-2 mt-1">
+                    <p className="flex-1 text-xl font-semibold text-green-600 dark:text-green-400">{priceInfo.range}</p>
+                    <div className="flex items-center gap-2">
+                        <ConfidenceBadge confidence={priceInfo.confidence} />
+                        <CopyToClipboard text={priceInfo.range} />
+                    </div>
+                </div>
             </div>
-             <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-2">
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Price Analysis:</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 italic">{priceInfo.analysis}</p>
+             <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Price Analysis</label>
+                <div className="flex items-start gap-2 mt-1">
+                    <p className="flex-1 text-xs text-gray-500 dark:text-gray-400 italic">{priceInfo.analysis}</p>
+                    <CopyToClipboard text={priceInfo.analysis} />
+                </div>
             </div>
         </div>
 
@@ -189,6 +212,36 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                 </div>
             )}
         </div>
+
+        {listing.itemName && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+              Find More Information
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ResourceLink
+                href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`"${listing.itemName}" official product images`)}`}
+                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>}
+                label="Product Images"
+              />
+              <ResourceLink
+                href={`https://www.google.com/search?q=${encodeURIComponent(`"${listing.itemName}" official documentation specs manual`)}`}
+                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
+                label="Docs & Specs"
+              />
+              <ResourceLink
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`"${listing.itemName}" review`)}`}
+                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" /></svg>}
+                label="Video Reviews"
+              />
+              <ResourceLink
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`"${listing.itemName}" tutorial setup`)}`}
+                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.502L16.25 22l-.648-1.498a3.375 3.375 0 00-2.456-2.456L11.25 18l1.498-.648a3.375 3.375 0 002.456-2.456L16.25 13l.648 1.498a3.375 3.375 0 002.456 2.456L21 18l-1.498.648a3.375 3.375 0 00-2.456 2.456z" /></svg>}
+                label="Tutorials & Setup"
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   };
