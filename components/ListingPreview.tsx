@@ -43,8 +43,11 @@ const CopyToClipboard: React.FC<{ text: string }> = ({ text }) => {
   };
 
   return (
-    <button onClick={copy} className="group p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+    <button onClick={copy} className="group relative p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
       <CopyIcon copied={copied} />
+      <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-gray-700 text-white text-xs rounded-md transition-opacity pointer-events-none ${copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+        {copied ? 'Copied!' : 'Copy'}
+      </span>
     </button>
   );
 };
