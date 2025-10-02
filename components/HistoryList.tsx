@@ -6,17 +6,22 @@ interface HistoryListProps {
   history: HistoryItem[];
   onSelect: (item: HistoryItem) => void;
   activeItemId: number | null;
+  hasSearchQuery: boolean;
 }
 
-export const HistoryList: React.FC<HistoryListProps> = React.memo(({ history, onSelect, activeItemId }) => {
+export const HistoryList: React.FC<HistoryListProps> = React.memo(({ history, onSelect, activeItemId, hasSearchQuery }) => {
   if (history.length === 0) {
     return (
         <div className="text-center py-10">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mx-auto text-gray-400">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d={hasSearchQuery ? "M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" : "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"} />
             </svg>
-            <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-gray-300">No Recent History</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Your generated listings will appear here.</p>
+            <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+              {hasSearchQuery ? 'No Results Found' : 'No Recent History'}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {hasSearchQuery ? 'Try a different search term.' : 'Your generated listings will appear here.'}
+            </p>
         </div>
     );
   }
