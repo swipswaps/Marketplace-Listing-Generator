@@ -1,6 +1,6 @@
 import React from 'react';
 import { HistoryItem } from '../types';
-import { exportAsTxt, exportAsJson, exportAsCsv, exportAsDoc, exportAsSql, exportAsPdf } from './ListingPreview';
+import { exportAsTxt, exportAsJson, exportAsCsv, exportAsDoc, exportAsSql, exportAsPdf } from '../services/exportService';
 
 interface ExportModalProps {
   isOpen: boolean;

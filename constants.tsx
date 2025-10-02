@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { Platform, PlatformInfo } from './types';
 
 export const PLATFORMS: PlatformInfo[] = [
