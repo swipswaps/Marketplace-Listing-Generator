@@ -58,6 +58,7 @@ export interface HistoryItem {
   };
   listingData: HistoryListing;
   timestamp: string;
+  customTitle?: string;
 }
 
 

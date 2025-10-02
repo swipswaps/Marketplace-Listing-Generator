@@ -55,7 +55,7 @@ export const HistoryList: React.FC<HistoryListProps> = React.memo(({ history, on
             <div className="flex-1 overflow-hidden">
               <div className="flex items-center gap-2">
                 <span className="text-primary dark:text-secondary">{platformInfo?.icon}</span>
-                <p className="font-bold text-gray-800 dark:text-gray-100 truncate">{item.listingData.listing.title}</p>
+                <p className="font-bold text-gray-800 dark:text-gray-100 truncate">{item.customTitle || item.listingData.listing.title}</p>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
                 {item.input.text ? `Input: "${item.input.text}"` : `Generated on ${new Date(item.timestamp).toLocaleDateString()}`}

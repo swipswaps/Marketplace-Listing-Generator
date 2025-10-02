@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedListing, HistoryListing, Platform, PriceAnalysis, PriceHistoryPoint, PriceDistributionBin } from '../types';
 
 interface ListingPreviewProps {
@@ -7,6 +7,7 @@ interface ListingPreviewProps {
   error: string | null;
   platform: Platform;
   onSave?: () => void;
+  onSaveAs?: () => void;
   isSaved?: boolean;
   priceHistory: PriceHistoryPoint[] | null;
   isFetchingHistory: boolean;
@@ -43,7 +44,7 @@ const CopyToClipboard: React.FC<{ text: string }> = ({ text }) => {
   };
 
   return (
-    <button onClick={copy} className="group relative p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+    <button onClick={copy} className="group relative p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors no-print">
       <CopyIcon copied={copied} />
       <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-gray-700 text-white text-xs rounded-md transition-opacity pointer-events-none ${copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
         {copied ? 'Copied!' : 'Copy'}
@@ -183,9 +184,11 @@ const PriceDistributionHistogram: React.FC<{ data: PriceDistributionBin[] }> = (
     );
 };
 
-export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, isSaved, priceHistory, isFetchingHistory }) => {
+export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, onSaveAs, isSaved, priceHistory, isFetchingHistory }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
-
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  
   useEffect(() => {
     if (isLoading) {
       const interval = setInterval(() => {
@@ -198,6 +201,16 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
       return () => clearInterval(interval);
     }
   }, [isLoading]);
+  
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+              setIsMenuOpen(false);
+          }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const renderContent = () => {
     if (isLoading) {
@@ -259,21 +272,33 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     <CopyToClipboard text={listing.itemName} />
                 </div>
             </div>
-             {onSave && (
-                <button
-                  onClick={onSave}
-                  disabled={isSaved}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    isSaved
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 cursor-default'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                    <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
-                  </svg>
-                  {isSaved ? 'Saved' : 'Save Listing'}
-                </button>
+             {onSave && onSaveAs && (
+                 <div ref={menuRef} className="relative no-print">
+                    <button
+                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                        Actions
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+                    </button>
+                    {isMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700">
+                           <button onClick={() => { onSave(); setIsMenuOpen(false); }} disabled={isSaved} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
+                                <span>{isSaved ? 'Saved' : 'Save Listing'}</span>
+                            </button>
+                             <button onClick={() => { onSaveAs(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 5.25zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" /></svg>
+                                <span>Save As...</span>
+                            </button>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                            <button onClick={() => { window.print(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M7.875 1.5C6.839 1.5 6 2.34 6 3.375v2.99c-.432.076-.85.22-1.228.425a3 3 0 00-2.122 2.122c-.206.378-.35.8-.425 1.228h-2.99C1.5 9.161 2.34 10 3.375 10h17.25c1.035 0 1.875-.84 1.875-1.875v-2.99c.076-.432.22-.85.425-1.228a3 3 0 002.122-2.122c.206-.378.35-.8.425-1.228h2.99c.935 0 1.688-.753 1.688-1.688S23.065 0 22.125 0H1.875C.84 0 0 .84 0 1.875v2.99c.432-.076.85-.22 1.228-.425a3 3 0 002.122-2.122c.206-.378.35-.8.425-1.228V3.375C3.75 2.34 4.59 1.5 5.625 1.5h2.25zM12 6a.75.75 0 01.75.75v3a.75.75 0 01-1.5 0v-3A.75.75 0 0112 6zm-3 8.25a.75.75 0 01.75-.75h4.5a.75.75 0 010 1.5h-4.5a.75.75 0 01-.75-.75zm0 2.25a.75.75 0 01.75-.75h4.5a.75.75 0 010 1.5h-4.5a.75.75 0 01-.75-.75z" clipRule="evenodd" /></svg>
+                                <span>Print</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
         
@@ -326,7 +351,7 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                 </div>
             )}
              {!isFetchingHistory && !priceHistory && onSave && (
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-center">
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-center no-print">
                     <p className="text-xs text-gray-500 dark:text-gray-400 italic">
                         Price history chart unavailable. <a href="#" onClick={(e) => { e.preventDefault(); alert("Please go to Settings (⚙️) to add your eBay API key."); }} className="text-primary dark:text-secondary underline">Add an eBay API key</a> for this feature.
                     </p>
@@ -371,7 +396,7 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
         </div>
 
         {listing.itemName && (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 no-print">
             <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
               Find More Information
             </h4>

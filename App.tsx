@@ -6,6 +6,7 @@ import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
 import { SavedListings } from './components/SavedListings';
 import { SettingsModal } from './components/SettingsModal';
+import { SaveAsModal } from './components/SaveAsModal';
 import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing, PriceHistoryPoint } from './types';
 import { generateListing } from './services/geminiService';
 import { fetchPriceHistory } from './services/ebayService';
@@ -13,6 +14,8 @@ import { fetchPriceHistory } from './services/ebayService';
 const APP_HISTORY_KEY = 'marketplaceListingHistory';
 const SAVED_LISTINGS_KEY = 'marketplaceSavedListings';
 const API_KEYS_KEY = 'marketplaceApiKeys';
+
+type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'platform-asc' | 'platform-desc';
 
 const App: React.FC = () => {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
@@ -30,12 +33,14 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'history' | 'saved'>('history');
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSaveAsModalOpen, setIsSaveAsModalOpen] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeys>({ ebay: '', x: '', gemini: '', openai: '' });
 
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[] | null>(null);
   const [isFetchingHistory, setIsFetchingHistory] = useState<boolean>(false);
   
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortOption, setSortOption] = useState<SortOption>('date-desc');
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -143,7 +148,7 @@ const App: React.FC = () => {
     setError(null);
   }, []);
 
-  const handleSaveListing = useCallback(() => {
+  const handleSaveListing = useCallback((customTitle?: string) => {
     if (!generatedListing) return;
 
     const itemToSave: HistoryItem = {
@@ -152,6 +157,7 @@ const App: React.FC = () => {
       input: { text: textInput, image: imageFile },
       listingData: generatedListing,
       timestamp: new Date().toISOString(),
+      ...(customTitle && { customTitle }),
     };
 
     setSavedListings(prevSaved => {
@@ -191,12 +197,14 @@ const App: React.FC = () => {
 
   const isCurrentListingSaved = useMemo(() => {
     if (!generatedListing) return false;
+    // A simple save is now possible, so we check if any saved item matches the current generated one.
     return savedListings.some(item => 
+        !item.customTitle && // Only check against simple saves
         item.listingData.listing.title === generatedListing.listing.title && 
         item.listingData.listing.description === generatedListing.listing.description
     );
   }, [generatedListing, savedListings]);
-
+  
   const deselectItems = useCallback(() => {
     setActiveHistoryId(null);
     setActiveSavedId(null);
@@ -217,26 +225,33 @@ const App: React.FC = () => {
     setImageFile(image);
     deselectItems();
   }, [deselectItems]);
-
-  const filteredHistory = useMemo(() => {
-    if (!searchQuery) return history;
-    const lowercasedQuery = searchQuery.toLowerCase();
-    return history.filter(item =>
-        item.listingData.listing.title.toLowerCase().includes(lowercasedQuery) ||
-        (item.listingData.listing.description && item.listingData.listing.description.toLowerCase().includes(lowercasedQuery)) ||
-        (item.input.text && item.input.text.toLowerCase().includes(lowercasedQuery))
-    );
-  }, [history, searchQuery]);
-
-  const filteredSavedListings = useMemo(() => {
-      if (!searchQuery) return savedListings;
+  
+  const sortAndFilterListings = useCallback((list: HistoryItem[]) => {
+      // 1. Sort the list
+      const sortedList = [...list].sort((a, b) => {
+          switch (sortOption) {
+              case 'date-asc': return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+              case 'name-asc': return (a.customTitle || a.listingData.listing.title).localeCompare(b.customTitle || b.listingData.listing.title);
+              case 'name-desc': return (b.customTitle || b.listingData.listing.title).localeCompare(a.customTitle || a.listingData.listing.title);
+              case 'platform-asc': return a.platform.localeCompare(b.platform);
+              case 'platform-desc': return b.platform.localeCompare(a.platform);
+              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); // date-desc
+          }
+      });
+      
+      // 2. Filter the sorted list
+      if (!searchQuery) return sortedList;
       const lowercasedQuery = searchQuery.toLowerCase();
-      return savedListings.filter(item =>
+      return sortedList.filter(item =>
+        (item.customTitle && item.customTitle.toLowerCase().includes(lowercasedQuery)) ||
         item.listingData.listing.title.toLowerCase().includes(lowercasedQuery) ||
         (item.listingData.listing.description && item.listingData.listing.description.toLowerCase().includes(lowercasedQuery)) ||
         (item.input.text && item.input.text.toLowerCase().includes(lowercasedQuery))
       );
-  }, [savedListings, searchQuery]);
+  }, [searchQuery, sortOption]);
+
+  const filteredHistory = useMemo(() => sortAndFilterListings(history), [history, sortAndFilterListings]);
+  const filteredSavedListings = useMemo(() => sortAndFilterListings(savedListings), [savedListings, sortAndFilterListings]);
 
 
   return (
@@ -244,7 +259,7 @@ const App: React.FC = () => {
       <Header onOpenSettings={() => setIsSettingsModalOpen(true)} />
       <main className="container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="flex flex-col space-y-6">
+          <div className="flex flex-col space-y-6 non-printable">
             <PlatformSelector
               selectedPlatform={selectedPlatform}
               onPlatformChange={onPlatformChange}
@@ -260,19 +275,33 @@ const App: React.FC = () => {
             
             {(history.length > 0 || savedListings.length > 0) && (
               <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6">
-                <div className="relative mb-4">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                    </svg>
+                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                  <div className="relative flex-grow">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search listings..."
+                      className="w-full p-2.5 pl-10 text-sm text-gray-900 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary dark:focus:ring-secondary focus:border-primary dark:focus:border-secondary transition"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search history and saved listings..."
-                    className="w-full p-2.5 pl-10 text-sm text-gray-900 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary dark:focus:ring-secondary focus:border-primary dark:focus:border-secondary transition"
-                  />
+                   <select
+                        value={sortOption}
+                        onChange={(e) => setSortOption(e.target.value as SortOption)}
+                        className="p-2.5 text-sm text-gray-900 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary dark:focus:ring-secondary focus:border-primary dark:focus:border-secondary transition"
+                    >
+                        <option value="date-desc">Sort by: Newest First</option>
+                        <option value="date-asc">Sort by: Oldest First</option>
+                        <option value="name-asc">Sort by: Name (A-Z)</option>
+                        <option value="name-desc">Sort by: Name (Z-A)</option>
+                        <option value="platform-asc">Sort by: Platform (A-Z)</option>
+                        <option value="platform-desc">Sort by: Platform (Z-A)</option>
+                    </select>
                 </div>
                 
                 <div className="flex border-b border-gray-200 dark:border-gray-700">
@@ -306,13 +335,14 @@ const App: React.FC = () => {
             )}
 
           </div>
-          <div className="lg:sticky top-8 self-start">
+          <div className="lg:sticky top-8 self-start printable-area">
              <ListingPreview 
                 listing={listingToShow}
                 isLoading={isLoading}
                 error={error}
                 platform={platformToShow}
-                onSave={generatedListing && !activeHistoryId && !activeSavedId ? handleSaveListing : undefined}
+                onSave={generatedListing && !activeHistoryId && !activeSavedId ? () => handleSaveListing() : undefined}
+                onSaveAs={generatedListing && !activeHistoryId && !activeSavedId ? () => setIsSaveAsModalOpen(true) : undefined}
                 isSaved={isCurrentListingSaved}
                 priceHistory={priceHistory}
                 isFetchingHistory={isFetchingHistory}
@@ -326,6 +356,14 @@ const App: React.FC = () => {
         onSave={handleSaveKeys}
         initialKeys={apiKeys}
       />
+      {generatedListing && (
+          <SaveAsModal
+            isOpen={isSaveAsModalOpen}
+            onClose={() => setIsSaveAsModalOpen(false)}
+            onSave={handleSaveListing}
+            initialTitle={generatedListing.itemName}
+          />
+      )}
     </div>
   );
 };
