@@ -28,24 +28,34 @@ const App: React.FC = () => {
   // =================================================================
   // Local State for the current generation process
   // These states manage the user's immediate inputs and the resulting output.
+  // They are considered ephemeral and are reset between generations.
   // =================================================================
+  /** The currently selected marketplace platform (e.g., Ebay, Facebook). */
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
+  /** The text content of the user's description input. */
   const [textInput, setTextInput] = useState<string>('');
+  /** The user's uploaded or captured image file. */
   const [imageFile, setImageFile] = useState<ImageFile | null>(null);
+  /** The AI-generated listing data from the last successful generation. */
   const [generatedListing, setGeneratedListing] = useState<GeneratedListing | null>(null);
+  /** A loading flag to show spinners and disable buttons during API calls. */
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  /** Any error message from the API or validation checks. */
   const [error, setError] = useState<string | null>(null);
+  /** The data for the price history chart, fetched from the eBay service. */
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[] | null>(null);
+  /** A loading flag specifically for the price history fetch. */
   const [isFetchingHistory, setIsFetchingHistory] = useState<boolean>(false);
   /** A flag to indicate that a generation has just completed, used to show the "Start New Listing" button. */
   const [isGenerationComplete, setIsGenerationComplete] = useState<boolean>(false);
   
-  /** A ref to the preview pane for scrolling and PDF export. */
+  /** A ref to the preview pane for scrolling to the top and for PDF export. */
   const previewRef = useRef<HTMLDivElement>(null);
 
   // =================================================================
   // Global State from Zustand store
-  // Hooks into the central store for persistent data and shared UI state.
+  // Hooks into the central store for persistent data (history, saved items, keys)
+  // and shared UI state (modals, search queries, etc.).
   // =================================================================
   const {
     history, savedListings, apiKeys, activeHistoryId, activeSavedId,
@@ -64,6 +74,7 @@ const App: React.FC = () => {
    * It validates inputs, calls the Gemini service, and updates the state with the result.
    */
   const handleGenerate = useCallback(async () => {
+    // 1. Pre-flight checks for API key and inputs.
     if (!apiKeys.gemini) {
       setError('Google Gemini API key is missing. Please add it in the Settings panel.');
       return;
@@ -73,20 +84,22 @@ const App: React.FC = () => {
       return;
     }
 
+    // 2. Reset the UI state for a new generation.
     setIsLoading(true);
     setError(null);
     setGeneratedListing(null);
     setPriceHistory(null);
     setActiveHistoryId(null);
     setActiveSavedId(null);
-    setIsGenerationComplete(false); // Reset on new generation attempt
+    setIsGenerationComplete(false);
 
     try {
+      // 3. Call the Gemini service.
       const result = await generateListing(selectedPlatform, textInput, apiKeys.gemini, imageFile ?? undefined);
       setGeneratedListing(result);
-      setIsGenerationComplete(true); // Signal that generation is done
+      setIsGenerationComplete(true); // Signal that generation is done.
 
-      // Create and store a new history item in the global store.
+      // 4. Create and store a new history item in the global store.
       const newHistoryItem: HistoryItem = {
         id: Date.now(),
         platform: selectedPlatform,
@@ -96,7 +109,7 @@ const App: React.FC = () => {
       };
       addHistoryItem(newHistoryItem);
 
-      // If an eBay API key is present, fetch the price history for the identified item.
+      // 5. If an eBay API key is present, fetch the price history for the identified item.
       if (apiKeys.ebay && result.itemName) {
           setIsFetchingHistory(true);
           fetchPriceHistory(result.itemName, apiKeys.ebay)
@@ -106,8 +119,8 @@ const App: React.FC = () => {
       }
 
     } catch (e: unknown) {
-      if (e instanceof Error) setError(e.message);
-      else setError('An unknown error occurred.');
+      const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -115,6 +128,7 @@ const App: React.FC = () => {
 
   /**
    * Resets the input and output panes to start a new listing from scratch.
+   * This is triggered by the "Start New Listing" button.
    */
   const handleStartNewListing = useCallback(() => {
     setTextInput('');
@@ -147,13 +161,14 @@ const App: React.FC = () => {
   const onImageChange = useCallback((image: ImageFile | null) => { setImageFile(image); deselectItems(); }, [deselectItems]);
 
   /**
-   * Handles selecting an item from the history list to view it.
+   * Handles selecting an item from the history list to view it in the preview pane.
    */
   const handleHistorySelect = useCallback((item: HistoryItem) => {
     setActiveHistoryId(item.id);
     setSelectedPlatform(item.platform);
     setTextInput(item.input.text);
     setImageFile(item.input.image);
+    // Clear ephemeral state to show the selected item's data instead.
     setGeneratedListing(null);
     setPriceHistory(null);
     setError(null);
@@ -161,13 +176,14 @@ const App: React.FC = () => {
   }, [setActiveHistoryId]);
   
   /**
-   * Handles selecting an item from the saved list to view it.
+   * Handles selecting an item from the saved list to view it in the preview pane.
    */
   const handleSelectSavedListing = useCallback((item: HistoryItem) => {
     setActiveSavedId(item.id);
     setSelectedPlatform(item.platform);
     setTextInput(item.input.text);
     setImageFile(item.input.image);
+    // Clear ephemeral state.
     setGeneratedListing(null);
     setPriceHistory(null);
     setError(null);
@@ -175,7 +191,7 @@ const App: React.FC = () => {
   }, [setActiveSavedId]);
 
   /**
-   * Handles saving a newly generated listing with a custom title.
+   * Handles saving a newly generated listing with a custom title via the Save modal.
    */
   const handleSaveListing = useCallback((customTitle: string) => {
     const listingToSave = generatedListing;
@@ -213,11 +229,12 @@ const App: React.FC = () => {
   }, [deleteHistoryItem]);
 
   /**
-   * Handles saving changes to an edited saved listing.
+   * Handles saving changes to an edited saved listing from the Edit modal.
    */
   const handleUpdateListing = useCallback((updatedItem: HistoryItem) => {
       updateSavedListing(updatedItem);
-      // Force a re-render of the preview if the active item was edited
+      // Force a re-render of the preview if the active item was edited.
+      // This is a small trick: deselect and re-select to trigger the `useMemo` hooks.
       if(activeSavedId === updatedItem.id) {
           setActiveSavedId(null);
           setTimeout(() => setActiveSavedId(updatedItem.id), 0);
@@ -226,6 +243,7 @@ const App: React.FC = () => {
 
   /**
    * Memoized calculation to determine which item is currently active (from history or saved).
+   * This prevents re-finding the item on every render.
    */
   const activeItem = useMemo(() => {
       return history.find(h => h.id === activeHistoryId) || savedListings.find(s => s.id === activeSavedId) || null;
@@ -244,8 +262,10 @@ const App: React.FC = () => {
   
   /**
    * Memoized logic for filtering and sorting the history and saved lists based on user input.
+   * `useCallback` is used here because the function itself is passed as a prop.
    */
   const sortAndFilterListings = useCallback((list: HistoryItem[]) => {
+      // 1. Sort the list based on the selected sort option.
       const sortedList = [...list].sort((a, b) => {
           switch (sortOption) {
               case 'date-asc': return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -253,10 +273,12 @@ const App: React.FC = () => {
               case 'name-desc': return (b.customTitle || b.listingData.listing.title).localeCompare(a.customTitle || a.listingData.listing.title);
               case 'platform-asc': return a.platform.localeCompare(b.platform);
               case 'platform-desc': return b.platform.localeCompare(a.platform);
-              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); // date-desc
+              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); // 'date-desc' is default
           }
       });
+      // 2. If no search query, return the sorted list.
       if (!searchQuery) return sortedList;
+      // 3. Filter the sorted list based on the search query.
       const lowercasedQuery = searchQuery.toLowerCase();
       return sortedList.filter(item =>
         (item.customTitle && item.customTitle.toLowerCase().includes(lowercasedQuery)) ||
@@ -287,6 +309,7 @@ const App: React.FC = () => {
       <Header onOpenSettings={openSettingsModal} />
       <main className="container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Column: Inputs and History/Saved Lists */}
           <div className="flex flex-col space-y-6 non-printable">
             <PlatformSelector
               selectedPlatform={selectedPlatform}
@@ -367,6 +390,7 @@ const App: React.FC = () => {
             )}
 
           </div>
+          {/* Right Column: Listing Preview */}
           <div ref={previewRef} className="lg:sticky top-8 self-start printable-area">
              <ListingPreview 
                 listing={listingToShow}
@@ -382,6 +406,8 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+      
+      {/* Modals are rendered here at the top level */}
       <SettingsModal 
         isOpen={isSettingsModalOpen}
         onClose={closeAllModals}
