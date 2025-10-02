@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { Platform, ImageFile, GeneratedListing } from '../types';
 
 interface VerificationResult {
@@ -16,12 +16,9 @@ export const verifyApiKey = async (apiKey: string): Promise<VerificationResult> 
     return { success: false, message: "API key cannot be empty." };
   }
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({apiKey});
     // This is a minimal, low-cost call to validate the key's authenticity.
-    await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: "hi",
-    });
+    await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'hi' });
     return { success: true };
   } catch (error) {
     console.error("API Key validation failed:", error);
@@ -107,6 +104,49 @@ const buildPrompt = (platform: Platform, text: string, image?: ImageFile): any[]
         - Follow these platform-specific instructions: ${platformInstructions}
     
     Return ONLY a valid JSON object that strictly adheres to the provided schema. Do not include any markdown formatting, explanatory text, or anything outside the JSON structure.
+    
+    The JSON schema is as follows:
+    {
+      "type": "object",
+      "properties": {
+        "itemName": { "type": "string" },
+        "suggestedPrice": {
+          "type": "object",
+          "properties": {
+            "range": { "type": "string" },
+            "analysis": { "type": "string" },
+            "confidence": { "type": "string", "enum": ["High", "Medium", "Low"] },
+            "comparableListingsCount": { "type": "integer" },
+            "averageListingAgeDays": { "type": "integer" },
+            "priceDistribution": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "range": { "type": "string" },
+                  "count": { "type": "integer" }
+                },
+                "required": ["range", "count"]
+              }
+            }
+          },
+          "required": ["range", "analysis", "confidence", "comparableListingsCount", "averageListingAgeDays", "priceDistribution"]
+        },
+        "listing": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "tags": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["title", "description"]
+        }
+      },
+      "required": ["itemName", "suggestedPrice", "listing"]
+    }
   `;
 
   parts.push({ text: userTextPrompt });
@@ -124,63 +164,17 @@ export const generateListing = async (
     throw new Error("Google Gemini API key is missing. Please add it in the Settings panel.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-  const contents = { parts: buildPrompt(platform, text, image) };
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      itemName: { type: Type.STRING, description: "The specific name of the item identified, e.g., '2021 Apple MacBook Pro 14-inch'." },
-      suggestedPrice: {
-        type: Type.OBJECT,
-        description: "A detailed pricing analysis.",
-        properties: {
-          range: { type: Type.STRING, description: "A competitive price range for the item, e.g., '$1200 - $1400'." },
-          analysis: { type: Type.STRING, description: "A brief explanation of the reasoning behind the suggested price." },
-          confidence: { type: Type.STRING, enum: ['High', 'Medium', 'Low'], description: "The confidence level of the pricing analysis." },
-          comparableListingsCount: { type: Type.INTEGER, description: "The total number of comparable listings found." },
-          averageListingAgeDays: { type: Type.INTEGER, description: "The average age in days of active comparable listings." },
-          priceDistribution: {
-            type: Type.ARRAY,
-            description: "An array of bins for a price distribution histogram.",
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                range: { type: Type.STRING, description: "The price range for this bin, e.g., '$180-$200'." },
-                count: { type: Type.INTEGER, description: "The number of listings in this price range." }
-              },
-              required: ["range", "count"]
-            }
-          }
-        },
-        required: ["range", "analysis", "confidence", "comparableListingsCount", "averageListingAgeDays", "priceDistribution"]
-      },
-      listing: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING, description: "The listing title. Must follow platform-specific rules (e.g., max 80 chars for eBay, very short for X.com)." },
-          description: { type: Type.STRING, description: "The listing description. Format must match platform requirements (e.g., HTML for eBay, plain text for Craigslist, full tweet for X.com)." },
-          tags: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "An array of relevant keywords or tags for the listing (especially for Facebook Marketplace)."
-          },
-        },
-        required: ["title", "description"],
-      },
-    },
-    required: ["itemName", "suggestedPrice", "listing"],
-  };
+  const ai = new GoogleGenAI({apiKey});
+  const promptParts = buildPrompt(platform, text, image);
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.5,
-      },
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts: promptParts },
+        config: {
+            responseMimeType: "application/json",
+            temperature: 0.5,
+        },
     });
 
     const jsonText = response.text.trim();

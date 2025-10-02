@@ -178,13 +178,13 @@ interface ListingPreviewProps {
   error: string | null;
   platform: Platform;
   onSave?: () => void;
-  onSaveAs?: () => void;
+  onExport?: () => void;
   isNewGeneration: boolean;
   priceHistory: PriceHistoryPoint[] | null;
   isFetchingHistory: boolean;
 }
 
-export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, onSaveAs, isNewGeneration, priceHistory, isFetchingHistory }) => {
+export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, onExport, isNewGeneration, priceHistory, isFetchingHistory }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -280,7 +280,7 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     Save Listing
                 </button>
              )}
-            {!isNewGeneration && onSaveAs && (
+            {!isNewGeneration && onExport && (
                  <div ref={menuRef} className="relative no-print">
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -291,9 +291,9 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     </button>
                     {isMenuOpen && (
                         <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700">
-                            <button onClick={() => { onSaveAs(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <button onClick={() => { onExport(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 1.5a.75.75 0 01.75.75V7.5h-1.5V2.25A.75.75 0 0112 1.5zM11.25 7.5v5.69l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V7.5h3.75a3 3 0 013 3v9a3 3 0 01-3 3h-9a3 3 0 01-3-3v-9a3 3 0 013-3h3.75z" /></svg>
-                                <span>Save As...</span>
+                                <span>Export As...</span>
                             </button>
                             <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                             <button onClick={() => { window.print(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
