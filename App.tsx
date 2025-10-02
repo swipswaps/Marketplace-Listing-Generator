@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Header } from './components/Header';
 import { PlatformSelector } from './components/PlatformSelector';
 import { InputArea } from './components/InputArea';
@@ -6,7 +6,9 @@ import { ListingPreview } from './components/ListingPreview';
 import { HistoryList } from './components/HistoryList';
 import { SavedListings } from './components/SavedListings';
 import { SettingsModal } from './components/SettingsModal';
-import { SaveAsModal } from './components/SaveAsModal';
+import { SaveListingModal } from './components/SaveAsModal';
+import { EditListingModal } from './components/EditListingModal';
+import { ExportModal } from './components/ExportModal';
 import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing, PriceHistoryPoint } from './types';
 import { generateListing } from './services/geminiService';
 import { fetchPriceHistory } from './services/ebayService';
@@ -16,6 +18,10 @@ const SAVED_LISTINGS_KEY = 'marketplaceSavedListings';
 const API_KEYS_KEY = 'marketplaceApiKeys';
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'platform-asc' | 'platform-desc';
+
+
+// == IN-APP MODAL COMPONENTS == //
+
 
 const App: React.FC = () => {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
@@ -33,7 +39,13 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'history' | 'saved'>('history');
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isSaveAsModalOpen, setIsSaveAsModalOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  
+  const [itemToEdit, setItemToEdit] = useState<HistoryItem | null>(null);
+  const [itemToExport, setItemToExport] = useState<HistoryItem | null>(null);
+
   const [apiKeys, setApiKeys] = useState<ApiKeys>({ ebay: '', x: '', gemini: '', openai: '' });
 
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[] | null>(null);
@@ -42,30 +54,25 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<SortOption>('date-desc');
 
+  const previewRef = useRef<HTMLDivElement>(null);
+
   // Load data from localStorage on mount
   useEffect(() => {
     try {
       const storedHistory = localStorage.getItem(APP_HISTORY_KEY);
       if (storedHistory) setHistory(JSON.parse(storedHistory));
-    } catch (e) {
-      console.error("Failed to parse history from localStorage", e);
-    }
+    } catch (e) { console.error("Failed to parse history", e); }
      try {
       const storedSaved = localStorage.getItem(SAVED_LISTINGS_KEY);
       if (storedSaved) setSavedListings(JSON.parse(storedSaved));
-    } catch (e) {
-      console.error("Failed to parse saved listings from localStorage", e);
-    }
+    } catch (e) { console.error("Failed to parse saved listings", e); }
     try {
       const storedApiKeys = localStorage.getItem(API_KEYS_KEY);
       if (storedApiKeys) {
-        // Ensure all keys are present, even if loading from older versions
         const loadedKeys = JSON.parse(storedApiKeys);
         setApiKeys(prevKeys => ({ ...prevKeys, ...loadedKeys }));
       }
-    } catch (e) {
-      console.error("Failed to parse API keys from localStorage", e);
-    }
+    } catch (e) { console.error("Failed to parse API keys", e); }
   }, []);
   
   const handleSaveKeys = useCallback((keys: ApiKeys) => {
@@ -86,7 +93,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setGeneratedListing(null);
-    setPriceHistory(null); // Clear previous chart data
+    setPriceHistory(null);
     setActiveHistoryId(null);
     setActiveSavedId(null);
 
@@ -108,7 +115,6 @@ const App: React.FC = () => {
         return updatedHistory;
       });
 
-      // After successful generation, fetch price history if eBay key is available
       if (apiKeys.ebay && result.itemName) {
           setIsFetchingHistory(true);
           fetchPriceHistory(result.itemName, apiKeys.ebay)
@@ -116,7 +122,6 @@ const App: React.FC = () => {
             .catch(err => console.error("Failed to fetch price history", err))
             .finally(() => setIsFetchingHistory(false));
       }
-
 
     } catch (e: unknown) {
       if (e instanceof Error) setError(e.message);
@@ -148,16 +153,17 @@ const App: React.FC = () => {
     setError(null);
   }, []);
 
-  const handleSaveListing = useCallback((customTitle?: string) => {
-    if (!generatedListing) return;
+  const handleSaveListing = useCallback((customTitle: string) => {
+    const listingToSave = generatedListing;
+    if (!listingToSave) return;
 
     const itemToSave: HistoryItem = {
       id: Date.now(),
       platform: selectedPlatform,
       input: { text: textInput, image: imageFile },
-      listingData: generatedListing,
+      listingData: listingToSave,
       timestamp: new Date().toISOString(),
-      ...(customTitle && { customTitle }),
+      customTitle,
     };
 
     setSavedListings(prevSaved => {
@@ -165,46 +171,60 @@ const App: React.FC = () => {
         localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
         return updatedSaved;
     });
+    setGeneratedListing(null); // Clear the main view after saving
   }, [generatedListing, selectedPlatform, textInput, imageFile]);
 
-  const handleDeleteListing = useCallback((itemId: number) => {
-    if (window.confirm("Are you sure you want to delete this saved listing? This action cannot be undone.")) {
-      setSavedListings(prevSaved => {
-          const updatedSaved = prevSaved.filter(item => item.id !== itemId);
-          localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updatedSaved));
-          return updatedSaved;
+  const handleDeleteSavedListing = useCallback((itemId: number) => {
+    if (window.confirm("Are you sure you want to delete this saved listing?")) {
+      setSavedListings(prev => {
+          const updated = prev.filter(item => item.id !== itemId);
+          localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updated));
+          return updated;
       });
-      if (activeSavedId === itemId) {
-          setActiveSavedId(null);
-      }
+      if (activeSavedId === itemId) setActiveSavedId(null);
     }
   }, [activeSavedId]);
   
+  const handleDeleteHistory = useCallback((itemId: number) => {
+    if (window.confirm("Are you sure you want to delete this history item?")) {
+      setHistory(prev => {
+          const updated = prev.filter(item => item.id !== itemId);
+          localStorage.setItem(APP_HISTORY_KEY, JSON.stringify(updated));
+          return updated;
+      });
+      if (activeHistoryId === itemId) setActiveHistoryId(null);
+    }
+  }, [activeHistoryId]);
+
+  const handleOpenEditModal = useCallback((item: HistoryItem) => {
+      setItemToEdit(item);
+      setIsEditModalOpen(true);
+  }, []);
+
+  const handleUpdateListing = useCallback((updatedItem: HistoryItem) => {
+      setSavedListings(prev => {
+          const updated = prev.map(item => item.id === updatedItem.id ? updatedItem : item);
+          localStorage.setItem(SAVED_LISTINGS_KEY, JSON.stringify(updated));
+          return updated;
+      });
+      if(activeSavedId === updatedItem.id) {
+          // Force a re-render of the preview if the active item was edited
+          setActiveSavedId(null);
+          setTimeout(() => setActiveSavedId(updatedItem.id), 0);
+      }
+  }, [activeSavedId]);
+
+  const activeItem = useMemo(() => {
+      return history.find(h => h.id === activeHistoryId) || savedListings.find(s => s.id === activeSavedId) || null;
+  }, [activeHistoryId, activeSavedId, history, savedListings]);
+
   const { listingToShow, platformToShow } = useMemo(() => {
-    const activeHistoryItem = history.find(item => item.id === activeHistoryId);
-    if (activeHistoryItem) {
-      return { listingToShow: activeHistoryItem.listingData, platformToShow: activeHistoryItem.platform };
+    if (activeItem) {
+        return { listingToShow: activeItem.listingData, platformToShow: activeItem.platform };
     }
-
-    const activeSavedItem = savedListings.find(item => item.id === activeSavedId);
-    if (activeSavedItem) {
-      return { listingToShow: activeSavedItem.listingData, platformToShow: activeSavedItem.platform };
-    }
-
     return { listingToShow: generatedListing as HistoryListing | null, platformToShow: selectedPlatform };
-  }, [activeHistoryId, activeSavedId, generatedListing, history, savedListings, selectedPlatform]);
+  }, [activeItem, generatedListing, selectedPlatform]);
 
-
-  const isCurrentListingSaved = useMemo(() => {
-    if (!generatedListing) return false;
-    // A simple save is now possible, so we check if any saved item matches the current generated one.
-    return savedListings.some(item => 
-        !item.customTitle && // Only check against simple saves
-        item.listingData.listing.title === generatedListing.listing.title && 
-        item.listingData.listing.description === generatedListing.listing.description
-    );
-  }, [generatedListing, savedListings]);
-  
   const deselectItems = useCallback(() => {
     setActiveHistoryId(null);
     setActiveSavedId(null);
@@ -227,7 +247,6 @@ const App: React.FC = () => {
   }, [deselectItems]);
   
   const sortAndFilterListings = useCallback((list: HistoryItem[]) => {
-      // 1. Sort the list
       const sortedList = [...list].sort((a, b) => {
           switch (sortOption) {
               case 'date-asc': return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -235,24 +254,32 @@ const App: React.FC = () => {
               case 'name-desc': return (b.customTitle || b.listingData.listing.title).localeCompare(a.customTitle || a.listingData.listing.title);
               case 'platform-asc': return a.platform.localeCompare(b.platform);
               case 'platform-desc': return b.platform.localeCompare(a.platform);
-              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); // date-desc
+              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
           }
       });
-      
-      // 2. Filter the sorted list
       if (!searchQuery) return sortedList;
       const lowercasedQuery = searchQuery.toLowerCase();
       return sortedList.filter(item =>
         (item.customTitle && item.customTitle.toLowerCase().includes(lowercasedQuery)) ||
         item.listingData.listing.title.toLowerCase().includes(lowercasedQuery) ||
-        (item.listingData.listing.description && item.listingData.listing.description.toLowerCase().includes(lowercasedQuery)) ||
-        (item.input.text && item.input.text.toLowerCase().includes(lowercasedQuery))
+        item.listingData.listing.description.toLowerCase().includes(lowercasedQuery) ||
+        item.input.text.toLowerCase().includes(lowercasedQuery)
       );
   }, [searchQuery, sortOption]);
 
   const filteredHistory = useMemo(() => sortAndFilterListings(history), [history, sortAndFilterListings]);
   const filteredSavedListings = useMemo(() => sortAndFilterListings(savedListings), [savedListings, sortAndFilterListings]);
-
+  
+  const handleOpenExportModal = useCallback(() => {
+      const item = activeItem || (generatedListing ? {
+          id: 0, platform: selectedPlatform, input: { text: textInput, image: imageFile },
+          listingData: generatedListing, timestamp: new Date().toISOString()
+      } : null);
+      if (item) {
+          setItemToExport(item);
+          setIsExportModalOpen(true);
+      }
+  }, [activeItem, generatedListing, selectedPlatform, textInput, imageFile]);
 
   return (
     <div className="min-h-screen bg-light dark:bg-dark text-gray-900 dark:text-gray-100 font-sans">
@@ -318,6 +345,7 @@ const App: React.FC = () => {
                      <HistoryList
                       history={filteredHistory}
                       onSelect={handleHistorySelect}
+                      onDelete={handleDeleteHistory}
                       activeItemId={activeHistoryId}
                       hasSearchQuery={searchQuery.length > 0}
                     />
@@ -325,7 +353,8 @@ const App: React.FC = () => {
                     <SavedListings
                       listings={filteredSavedListings}
                       onSelect={handleSelectSavedListing}
-                      onDelete={handleDeleteListing}
+                      onDelete={handleDeleteSavedListing}
+                      onEdit={handleOpenEditModal}
                       activeItemId={activeSavedId}
                       hasSearchQuery={searchQuery.length > 0}
                     />
@@ -335,15 +364,15 @@ const App: React.FC = () => {
             )}
 
           </div>
-          <div className="lg:sticky top-8 self-start printable-area">
+          <div ref={previewRef} className="lg:sticky top-8 self-start printable-area">
              <ListingPreview 
                 listing={listingToShow}
                 isLoading={isLoading}
                 error={error}
                 platform={platformToShow}
-                onSave={generatedListing && !activeHistoryId && !activeSavedId ? () => handleSaveListing() : undefined}
-                onSaveAs={generatedListing && !activeHistoryId && !activeSavedId ? () => setIsSaveAsModalOpen(true) : undefined}
-                isSaved={isCurrentListingSaved}
+                onSave={generatedListing ? () => setIsSaveModalOpen(true) : undefined}
+                onExport={!generatedListing ? handleOpenExportModal : undefined}
+                isNewGeneration={!!generatedListing}
                 priceHistory={priceHistory}
                 isFetchingHistory={isFetchingHistory}
             />
@@ -356,14 +385,24 @@ const App: React.FC = () => {
         onSave={handleSaveKeys}
         initialKeys={apiKeys}
       />
-      {generatedListing && (
-          <SaveAsModal
-            isOpen={isSaveAsModalOpen}
-            onClose={() => setIsSaveAsModalOpen(false)}
-            onSave={handleSaveListing}
-            initialTitle={generatedListing.itemName}
-          />
-      )}
+      <SaveListingModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        onSave={handleSaveListing}
+        initialTitle={generatedListing?.itemName || ''}
+      />
+      <EditListingModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        item={itemToEdit}
+        onSave={handleUpdateListing}
+      />
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        item={itemToExport}
+        previewRef={previewRef}
+      />
     </div>
   );
 };

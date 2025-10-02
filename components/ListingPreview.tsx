@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GeneratedListing, HistoryListing, Platform, PriceAnalysis, PriceHistoryPoint, PriceDistributionBin } from '../types';
+import { GeneratedListing, HistoryListing, HistoryItem, Platform, PriceAnalysis, PriceHistoryPoint, PriceDistributionBin } from '../types';
 
 interface ListingPreviewProps {
   listing: HistoryListing | null;
@@ -7,11 +7,127 @@ interface ListingPreviewProps {
   error: string | null;
   platform: Platform;
   onSave?: () => void;
-  onSaveAs?: () => void;
-  isSaved?: boolean;
+  onExport?: () => void;
+  isNewGeneration: boolean;
   priceHistory: PriceHistoryPoint[] | null;
   isFetchingHistory: boolean;
 }
+
+// Declare globals from CDN scripts
+declare var jspdf: any;
+declare var html2canvas: any;
+
+//== EXPORT UTILITIES ==//
+
+const triggerDownload = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
+const getSanitizedTitle = (item: HistoryItem) => {
+    return (item.customTitle || item.listingData.itemName).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+};
+
+export const exportAsTxt = (item: HistoryItem) => {
+    const { itemName, suggestedPrice, listing } = item.listingData;
+    const priceInfo = typeof suggestedPrice === 'string' ? suggestedPrice : suggestedPrice.range;
+    let content = `Item: ${itemName}\n`;
+    content += `Platform: ${item.platform}\n`;
+    content += `Suggested Price: ${priceInfo}\n\n`;
+    content += `--- Listing ---\n`;
+    content += `Title: ${listing.title}\n\n`;
+    content += `Description:\n${listing.description.replace(/<[^>]+>/g, '')}\n\n`; // Strip HTML for TXT
+    if (listing.tags) {
+        content += `Tags: ${listing.tags.join(', ')}\n`;
+    }
+    triggerDownload(content, `${getSanitizedTitle(item)}.txt`, 'text/plain');
+};
+
+export const exportAsJson = (item: HistoryItem) => {
+    triggerDownload(JSON.stringify(item, null, 2), `${getSanitizedTitle(item)}.json`, 'application/json');
+};
+
+export const exportAsCsv = (item: HistoryItem) => {
+    const { itemName, suggestedPrice, listing } = item.listingData;
+    const priceInfo = typeof suggestedPrice === 'string' ? suggestedPrice : suggestedPrice.range;
+    const headers = "itemName,platform,price,title,description,tags";
+    const values = [
+        `"${itemName.replace(/"/g, '""')}"`,
+        `"${item.platform}"`,
+        `"${priceInfo}"`,
+        `"${listing.title.replace(/"/g, '""')}"`,
+        `"${listing.description.replace(/"/g, '""')}"`,
+        `"${(listing.tags || []).join(', ')}"`,
+    ].join(',');
+    const content = `${headers}\n${values}`;
+    triggerDownload(content, `${getSanitizedTitle(item)}.csv`, 'text/csv');
+};
+
+export const exportAsDoc = (item: HistoryItem) => {
+    const { itemName, suggestedPrice, listing } = item.listingData;
+    const priceInfo = typeof suggestedPrice === 'string' ? suggestedPrice : suggestedPrice.range;
+    const content = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset='utf-8'><title>Export</title></head>
+        <body>
+            <h1>${itemName}</h1>
+            <p><strong>Platform:</strong> ${item.platform}</p>
+            <p><strong>Suggested Price:</strong> ${priceInfo}</p>
+            <hr/>
+            <h2>${listing.title}</h2>
+            <div>${listing.description}</div>
+            ${listing.tags ? `<p><strong>Tags:</strong> ${listing.tags.join(', ')}</p>` : ''}
+        </body>
+        </html>`;
+    triggerDownload(content, `${getSanitizedTitle(item)}.doc`, 'application/msword');
+};
+
+export const exportAsSql = (item: HistoryItem) => {
+    const { itemName, suggestedPrice, listing } = item.listingData;
+    const priceInfo = typeof suggestedPrice === 'string' ? suggestedPrice : suggestedPrice.range;
+    const escapeSql = (str: string) => str.replace(/'/g, "''");
+    
+    const content = `
+-- Exported from AI Marketplace Listing Generator
+INSERT INTO listings (item_name, platform, suggested_price, title, description, tags, generated_at)
+VALUES (
+  '${escapeSql(itemName)}',
+  '${escapeSql(item.platform)}',
+  '${escapeSql(priceInfo)}',
+  '${escapeSql(listing.title)}',
+  '${escapeSql(listing.description)}',
+  '${escapeSql((listing.tags || []).join(','))}',
+  '${item.timestamp}'
+);`;
+    triggerDownload(content.trim(), `${getSanitizedTitle(item)}.sql`, 'application/sql');
+};
+
+export const exportAsPdf = async (element: HTMLElement | null, item: HistoryItem) => {
+    if (!element) return;
+    try {
+        const { jsPDF } = jspdf;
+        const canvas = await html2canvas(element, { useCORS: true, scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`${getSanitizedTitle(item)}.pdf`);
+    } catch (e) {
+        console.error("Error generating PDF:", e);
+        alert("Sorry, an error occurred while generating the PDF.");
+    }
+};
+
 
 const LOADING_MESSAGES = [
   "The AI is analyzing your product...",
@@ -184,10 +300,11 @@ const PriceDistributionHistogram: React.FC<{ data: PriceDistributionBin[] }> = (
     );
 };
 
-export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, onSaveAs, isSaved, priceHistory, isFetchingHistory }) => {
+export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listing, isLoading, error, platform, onSave, onExport, isNewGeneration, priceHistory, isFetchingHistory }) => {
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const previewContentRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     if (isLoading) {
@@ -247,7 +364,6 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
       );
     }
 
-    // Default values for backward compatibility with old history items
     const defaultPriceAnalysis: PriceAnalysis = {
         range: 'N/A',
         analysis: 'No pricing analysis available.',
@@ -257,13 +373,12 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
         priceDistribution: [],
     };
     
-    // Merge defaults with actual data, handling both old string format and incomplete objects
     const priceInfo: PriceAnalysis = typeof listing.suggestedPrice === 'string'
       ? { ...defaultPriceAnalysis, range: listing.suggestedPrice, analysis: 'Price from older listing format.' }
       : { ...defaultPriceAnalysis, ...listing.suggestedPrice };
       
     return (
-      <div className="space-y-6 p-1">
+      <div ref={previewContentRef} className="space-y-6 p-1">
         <div className="flex justify-between items-start">
             <div className="flex-1 pr-4">
                 <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Identified Item</label>
@@ -272,7 +387,16 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     <CopyToClipboard text={listing.itemName} />
                 </div>
             </div>
-             {onSave && onSaveAs && (
+             {isNewGeneration && onSave && (
+                <button 
+                    onClick={onSave}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors bg-primary text-white hover:bg-blue-800 no-print"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
+                    Save Listing
+                </button>
+             )}
+            {!isNewGeneration && onExport && (
                  <div ref={menuRef} className="relative no-print">
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -283,13 +407,9 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
                     </button>
                     {isMenuOpen && (
                         <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700">
-                           <button onClick={() => { onSave(); setIsMenuOpen(false); }} disabled={isSaved} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
-                                <span>{isSaved ? 'Saved' : 'Save Listing'}</span>
-                            </button>
-                             <button onClick={() => { onSaveAs(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 5.25zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75zm0 4.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" /></svg>
-                                <span>Save As...</span>
+                            <button onClick={() => { onExport(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 1.5a.75.75 0 01.75.75V7.5h-1.5V2.25A.75.75 0 0112 1.5zM11.25 7.5v5.69l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V7.5h3.75a3 3 0 013 3v9a3 3 0 01-3 3h-9a3 3 0 01-3-3v-9a3 3 0 013-3h3.75z" /></svg>
+                                <span>Export As...</span>
                             </button>
                             <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                             <button onClick={() => { window.print(); setIsMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -403,7 +523,7 @@ export const ListingPreview: React.FC<ListingPreviewProps> = React.memo(({ listi
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ResourceLink
                 href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`"${listing.itemName}" official product images`)}`}
-                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>}
+                icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.75.75 0 11-.75 0 .375.375 0 01.75 0z" /></svg>}
                 label="Product Images"
               />
               <ResourceLink
