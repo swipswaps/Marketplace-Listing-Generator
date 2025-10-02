@@ -53,60 +53,85 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
   }, [cameraStream]);
 
   const startCamera = useCallback(async (deviceId: string) => {
-    stopCamera();
+    stopCamera(); 
     setCameraError(null);
     try {
       const constraints: MediaStreamConstraints = {
         video: { deviceId: deviceId ? { exact: deviceId } : undefined }
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      setCameraStream(stream);
     } catch (err) {
       console.error("Error accessing camera:", err);
+      let detailedError = "An unknown error occurred while accessing the camera. Please try again or select a different camera.";
       if (err instanceof DOMException) {
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          setCameraError("Camera access was denied. Please grant permission in your browser settings.");
-        } else if (err.name === "NotFoundError") {
-          setCameraError("No camera found. Please ensure a camera is connected and enabled.");
-        } else {
-          setCameraError("An error occurred while accessing the camera.");
+        switch (err.name) {
+          case "NotAllowedError":
+          case "PermissionDeniedError":
+            detailedError = "Camera access denied. Please grant permission in your browser's site settings and reload the page.";
+            break;
+          case "NotFoundError":
+          case "DevicesNotFoundError":
+            detailedError = "No camera found. Please ensure a camera is connected and enabled in your system settings.";
+            break;
+          case "NotReadableError":
+          case "TrackStartError":
+            detailedError = "The selected camera is currently in use by another application. Please close the other application and try again.";
+            break;
+          case "OverconstrainedError":
+          case "ConstraintNotSatisfiedError":
+             detailedError = "The selected camera does not support the required settings. Try selecting a different camera.";
+             break;
+          default:
+            detailedError = `An error occurred while accessing the camera (${err.name}). Please try again or select a different camera.`;
+            break;
         }
       }
+      setCameraError(detailedError);
     }
   }, [stopCamera]);
 
+  // Effect to enumerate devices and set a default when switching to camera mode.
   useEffect(() => {
     if (inputMode === 'camera') {
+      let isCancelled = false;
       navigator.mediaDevices.enumerateDevices()
         .then(devices => {
+          if (isCancelled) return;
           const videoInputs = devices.filter(device => device.kind === 'videoinput');
           setVideoDevices(videoInputs);
-          const currentDeviceId = selectedDeviceId || videoInputs[0]?.deviceId;
-          if (currentDeviceId) {
-              setSelectedDeviceId(currentDeviceId);
-              startCamera(currentDeviceId);
-          } else if (videoInputs.length === 0) {
-              setCameraError("No camera devices were found.");
+          
+          if (videoInputs.length === 0) {
+              setCameraError("No camera devices were found. Please ensure a camera is connected and enabled in your system settings.");
+          } else if (!selectedDeviceId && videoInputs.length > 0) {
+              // If no device is selected, set the first one as default.
+              // This will trigger the next useEffect to start the stream.
+              setSelectedDeviceId(videoInputs[0].deviceId);
           }
         });
-    } else {
-      stopCamera();
+      return () => {
+          isCancelled = true;
+      };
     }
+  }, [inputMode, selectedDeviceId]);
+
+
+  // Effect to manage the camera stream (start/stop).
+  useEffect(() => {
+    if (inputMode === 'camera' && selectedDeviceId) {
+        startCamera(selectedDeviceId);
+    } else {
+        stopCamera();
+    }
+    
+    // Cleanup function: ensure camera is stopped when dependencies change or component unmounts.
     return () => {
       stopCamera();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputMode]);
-
-  useEffect(() => {
-    if (selectedDeviceId && inputMode === 'camera') {
-        startCamera(selectedDeviceId);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId]);
+  }, [inputMode, selectedDeviceId, startCamera, stopCamera]);
 
   const handleFileChange = useCallback(async (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -138,10 +163,9 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
         });
         setImageSource('camera');
         setInputMode('upload');
-        stopCamera();
       }
     }
-  }, [onImageChange, stopCamera]);
+  }, [onImageChange]);
   
   const handleRemoveImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -203,9 +227,14 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
   const renderCameraView = () => (
     <div className="space-y-4 flex flex-col items-center">
         {cameraError ? (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-center text-sm">
-                <p className="font-semibold">Camera Error</p>
-                <p>{cameraError}</p>
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm w-full max-w-sm">
+                <div className="flex items-center justify-center mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <p className="font-semibold text-center">Camera Unavailable</p>
+                </div>
+                <p className="text-left">{cameraError}</p>
             </div>
         ) : (
              <video ref={videoRef} autoPlay playsInline muted className={`w-full max-w-sm rounded-lg bg-gray-900 ${cameraStream ? 'block' : 'hidden'}`}></video>
