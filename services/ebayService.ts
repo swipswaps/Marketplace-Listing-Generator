@@ -1,5 +1,10 @@
 import { PriceHistoryPoint } from '../types';
 
+interface VerificationResult {
+  success: boolean;
+  message?: string;
+}
+
 /**
  * Simulates a call to the eBay API to fetch recent sales data for a given item.
  * In a real application, this would make an authenticated request to an endpoint
@@ -41,4 +46,26 @@ export const fetchPriceHistory = async (
   }
 
   return data;
+};
+
+/**
+ * Simulates verification of an eBay API key (App ID).
+ * @param apiKey The eBay App ID to verify.
+ * @returns A promise resolving to a verification result.
+ */
+export const verifyApiKey = async (apiKey: string): Promise<VerificationResult> => {
+    if (!apiKey) {
+        return { success: false, message: "API key cannot be empty." };
+    }
+
+    if (apiKey.length < 20) { // Simple format check
+        return { success: false, message: "Invalid format. Key seems too short for an eBay App ID." };
+    }
+
+    // Simulate network delay for verification
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    // In a real app, you'd make a call to an eBay endpoint here.
+    // For this demo, we'll assume any key that passes the length check is valid.
+    return { success: true };
 };
