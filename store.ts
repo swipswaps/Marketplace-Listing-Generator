@@ -16,9 +16,9 @@ interface AppState {
   isSettingsModalOpen: boolean;
   isSaveModalOpen: boolean;
   isEditModalOpen: boolean;
-  isExportModalOpen: boolean;
+  isSaveAsModalOpen: boolean;
   itemToEdit: HistoryItem | null;
-  itemToExport: HistoryItem | null;
+  itemToSaveAs: HistoryItem | null;
 
   setApiKeys: (keys: ApiKeys) => void;
   addHistoryItem: (item: HistoryItem) => void;
@@ -34,7 +34,7 @@ interface AppState {
   openSettingsModal: () => void;
   openSaveModal: () => void;
   openEditModal: (item: HistoryItem) => void;
-  openExportModal: (item: HistoryItem) => void;
+  openSaveAsModal: (item: HistoryItem) => void;
   closeAllModals: () => void;
 }
 
@@ -111,9 +111,9 @@ export const useStore = create<AppState>()(
       isSettingsModalOpen: false,
       isSaveModalOpen: false,
       isEditModalOpen: false,
-      isExportModalOpen: false,
+      isSaveAsModalOpen: false,
       itemToEdit: null,
-      itemToExport: null,
+      itemToSaveAs: null,
 
       // Actions
       setApiKeys: (keys) => set({ apiKeys: keys }),
@@ -140,14 +140,14 @@ export const useStore = create<AppState>()(
       openSettingsModal: () => set({ isSettingsModalOpen: true }),
       openSaveModal: () => set({ isSaveModalOpen: true }),
       openEditModal: (item) => set({ itemToEdit: item, isEditModalOpen: true }),
-      openExportModal: (item) => set({ itemToExport: item, isExportModalOpen: true }),
+      openSaveAsModal: (item) => set({ itemToSaveAs: item, isSaveAsModalOpen: true }),
       closeAllModals: () => set({
         isSettingsModalOpen: false,
         isSaveModalOpen: false,
         isEditModalOpen: false,
-        isExportModalOpen: false,
+        isSaveAsModalOpen: false,
         itemToEdit: null,
-        itemToExport: null,
+        itemToSaveAs: null,
       }),
     }),
     {

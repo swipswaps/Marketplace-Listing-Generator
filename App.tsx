@@ -8,7 +8,7 @@ import { SavedListings } from './components/SavedListings';
 import { SettingsModal } from './components/SettingsModal';
 import { SaveListingModal } from './components/SaveListingModal';
 import { EditListingModal } from './components/EditListingModal';
-import { ExportModal } from './components/ExportModal';
+import { SaveAsModal } from './components/SaveAsModal';
 import { useStore } from './store';
 import { Platform, GeneratedListing, ImageFile, HistoryItem, HistoryListing, PriceHistoryPoint } from './types';
 import { generateListing } from './services/geminiService';
@@ -60,13 +60,13 @@ const App: React.FC = () => {
   const {
     history, savedListings, apiKeys, activeHistoryId, activeSavedId,
     activeTab, searchQuery, sortOption,
-    isSettingsModalOpen, isSaveModalOpen, isEditModalOpen, isExportModalOpen,
-    itemToEdit, itemToExport,
+    isSettingsModalOpen, isSaveModalOpen, isEditModalOpen, isSaveAsModalOpen,
+    itemToEdit, itemToSaveAs,
     setApiKeys, addHistoryItem, deleteHistoryItem,
     addSavedListing, updateSavedListing, deleteSavedListing,
     setActiveHistoryId, setActiveSavedId, setActiveTab,
     setSearchQuery, setSortOption,
-    openSettingsModal, openSaveModal, openEditModal, openExportModal, closeAllModals
+    openSettingsModal, openSaveModal, openEditModal, openSaveAsModal, closeAllModals
   } = useStore();
 
   /**
@@ -294,15 +294,15 @@ const App: React.FC = () => {
   /**
    * Prepares the data for the export modal. It uses the active item or the newly generated listing.
    */
-  const handleOpenExportModal = useCallback(() => {
+  const handleOpenSaveAsModal = useCallback(() => {
       const item = activeItem || (generatedListing ? {
           id: 0, platform: selectedPlatform, input: { text: textInput, image: imageFile },
           listingData: generatedListing, timestamp: new Date().toISOString()
       } : null);
       if (item) {
-          openExportModal(item);
+          openSaveAsModal(item);
       }
-  }, [activeItem, generatedListing, selectedPlatform, textInput, imageFile, openExportModal]);
+  }, [activeItem, generatedListing, selectedPlatform, textInput, imageFile, openSaveAsModal]);
 
   return (
     <div className="min-h-screen bg-light dark:bg-dark text-gray-900 dark:text-gray-100 font-sans">
@@ -398,7 +398,7 @@ const App: React.FC = () => {
                 error={error}
                 platform={platformToShow}
                 onSave={generatedListing ? openSaveModal : undefined}
-                onExport={!generatedListing ? handleOpenExportModal : undefined}
+                onSaveAs={!generatedListing ? handleOpenSaveAsModal : undefined}
                 isNewGeneration={!!generatedListing}
                 priceHistory={priceHistory}
                 isFetchingHistory={isFetchingHistory}
@@ -426,10 +426,10 @@ const App: React.FC = () => {
         item={itemToEdit}
         onSave={handleUpdateListing}
       />
-      <ExportModal
-        isOpen={isExportModalOpen}
+      <SaveAsModal
+        isOpen={isSaveAsModalOpen}
         onClose={closeAllModals}
-        item={itemToExport}
+        item={itemToSaveAs}
         previewRef={previewRef}
       />
     </div>
