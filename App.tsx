@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { Header } from './components/Header';
 import { PlatformSelector } from './components/PlatformSelector';
 import { InputArea } from './components/InputArea';
@@ -10,14 +10,25 @@ import { SaveListingModal } from './components/SaveListingModal';
 import { EditListingModal } from './components/EditListingModal';
 import { ExportModal } from './components/ExportModal';
 import { useStore } from './store';
-import { Platform, GeneratedListing, ImageFile, HistoryItem, ApiKeys, HistoryListing, PriceHistoryPoint } from './types';
+import { Platform, GeneratedListing, ImageFile, HistoryItem, HistoryListing, PriceHistoryPoint } from './types';
 import { generateListing } from './services/geminiService';
 import { fetchPriceHistory } from './services/ebayService';
 
+/**
+ * Defines the available sorting options for the history and saved lists.
+ */
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'platform-asc' | 'platform-desc';
 
+/**
+ * The main application component.
+ * It orchestrates the entire UI and manages both local component state
+ * for the generation process and interactions with the global Zustand store.
+ */
 const App: React.FC = () => {
-  // Local state for the current generation process
+  // =================================================================
+  // Local State for the current generation process
+  // These states manage the user's immediate inputs and the resulting output.
+  // =================================================================
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(Platform.Ebay);
   const [textInput, setTextInput] = useState<string>('');
   const [imageFile, setImageFile] = useState<ImageFile | null>(null);
@@ -26,10 +37,16 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[] | null>(null);
   const [isFetchingHistory, setIsFetchingHistory] = useState<boolean>(false);
+  /** A flag to indicate that a generation has just completed, used to show the "Start New Listing" button. */
+  const [isGenerationComplete, setIsGenerationComplete] = useState<boolean>(false);
   
+  /** A ref to the preview pane for scrolling and PDF export. */
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // Get state and actions from the Zustand store
+  // =================================================================
+  // Global State from Zustand store
+  // Hooks into the central store for persistent data and shared UI state.
+  // =================================================================
   const {
     history, savedListings, apiKeys, activeHistoryId, activeSavedId,
     activeTab, searchQuery, sortOption,
@@ -42,6 +59,10 @@ const App: React.FC = () => {
     openSettingsModal, openSaveModal, openEditModal, openExportModal, closeAllModals
   } = useStore();
 
+  /**
+   * Main handler for generating a new listing.
+   * It validates inputs, calls the Gemini service, and updates the state with the result.
+   */
   const handleGenerate = useCallback(async () => {
     if (!apiKeys.gemini) {
       setError('Google Gemini API key is missing. Please add it in the Settings panel.');
@@ -58,11 +79,14 @@ const App: React.FC = () => {
     setPriceHistory(null);
     setActiveHistoryId(null);
     setActiveSavedId(null);
+    setIsGenerationComplete(false); // Reset on new generation attempt
 
     try {
       const result = await generateListing(selectedPlatform, textInput, apiKeys.gemini, imageFile ?? undefined);
       setGeneratedListing(result);
+      setIsGenerationComplete(true); // Signal that generation is done
 
+      // Create and store a new history item in the global store.
       const newHistoryItem: HistoryItem = {
         id: Date.now(),
         platform: selectedPlatform,
@@ -70,9 +94,9 @@ const App: React.FC = () => {
         listingData: result,
         timestamp: new Date().toISOString(),
       };
-
       addHistoryItem(newHistoryItem);
 
+      // If an eBay API key is present, fetch the price history for the identified item.
       if (apiKeys.ebay && result.itemName) {
           setIsFetchingHistory(true);
           fetchPriceHistory(result.itemName, apiKeys.ebay)
@@ -89,6 +113,42 @@ const App: React.FC = () => {
     }
   }, [selectedPlatform, textInput, imageFile, apiKeys.gemini, apiKeys.ebay, addHistoryItem, setActiveHistoryId, setActiveSavedId]);
 
+  /**
+   * Resets the input and output panes to start a new listing from scratch.
+   */
+  const handleStartNewListing = useCallback(() => {
+    setTextInput('');
+    setImageFile(null);
+    setGeneratedListing(null);
+    setError(null);
+    setPriceHistory(null);
+    setActiveHistoryId(null);
+    setActiveSavedId(null);
+    setIsGenerationComplete(false);
+    if (previewRef.current) {
+      previewRef.current.scrollTop = 0; // Scroll preview pane to top
+    }
+  }, [setActiveHistoryId, setActiveSavedId]);
+
+  /**
+   * A helper function to deselect any active history/saved item.
+   * This is called when the user changes an input, signaling they are creating a new listing.
+   */
+  const deselectItems = useCallback(() => {
+    setActiveHistoryId(null);
+    setActiveSavedId(null);
+    setPriceHistory(null);
+    setIsGenerationComplete(false);
+  }, [setActiveHistoryId, setActiveSavedId]);
+  
+  // Handlers for user actions that modify inputs. They deselect any active item.
+  const onPlatformChange = useCallback((platform: Platform) => { setSelectedPlatform(platform); deselectItems(); }, [deselectItems]);
+  const onTextChange = useCallback((text: string) => { setTextInput(text); deselectItems(); }, [deselectItems]);
+  const onImageChange = useCallback((image: ImageFile | null) => { setImageFile(image); deselectItems(); }, [deselectItems]);
+
+  /**
+   * Handles selecting an item from the history list to view it.
+   */
   const handleHistorySelect = useCallback((item: HistoryItem) => {
     setActiveHistoryId(item.id);
     setSelectedPlatform(item.platform);
@@ -97,8 +157,12 @@ const App: React.FC = () => {
     setGeneratedListing(null);
     setPriceHistory(null);
     setError(null);
+    setIsGenerationComplete(true); // Show "Start New" button when viewing history
   }, [setActiveHistoryId]);
   
+  /**
+   * Handles selecting an item from the saved list to view it.
+   */
   const handleSelectSavedListing = useCallback((item: HistoryItem) => {
     setActiveSavedId(item.id);
     setSelectedPlatform(item.platform);
@@ -107,8 +171,12 @@ const App: React.FC = () => {
     setGeneratedListing(null);
     setPriceHistory(null);
     setError(null);
+    setIsGenerationComplete(true); // Show "Start New" button when viewing saved items
   }, [setActiveSavedId]);
 
+  /**
+   * Handles saving a newly generated listing with a custom title.
+   */
   const handleSaveListing = useCallback((customTitle: string) => {
     const listingToSave = generatedListing;
     if (!listingToSave) return;
@@ -123,62 +191,60 @@ const App: React.FC = () => {
     };
 
     addSavedListing(itemToSave);
-    setGeneratedListing(null); // Clear the main view after saving
-  }, [generatedListing, selectedPlatform, textInput, imageFile, addSavedListing]);
+    handleStartNewListing(); // Reset the interface after saving
+  }, [generatedListing, selectedPlatform, textInput, imageFile, addSavedListing, handleStartNewListing]);
 
+  /**
+   * Handles deleting a listing from the saved list.
+   */
   const handleDeleteSavedListing = useCallback((itemId: number) => {
     if (window.confirm("Are you sure you want to delete this saved listing?")) {
       deleteSavedListing(itemId);
     }
   }, [deleteSavedListing]);
   
+  /**
+   * Handles deleting an item from the history list.
+   */
   const handleDeleteHistory = useCallback((itemId: number) => {
     if (window.confirm("Are you sure you want to delete this history item?")) {
       deleteHistoryItem(itemId);
     }
   }, [deleteHistoryItem]);
 
+  /**
+   * Handles saving changes to an edited saved listing.
+   */
   const handleUpdateListing = useCallback((updatedItem: HistoryItem) => {
       updateSavedListing(updatedItem);
+      // Force a re-render of the preview if the active item was edited
       if(activeSavedId === updatedItem.id) {
-          // Force a re-render of the preview if the active item was edited
           setActiveSavedId(null);
           setTimeout(() => setActiveSavedId(updatedItem.id), 0);
       }
   }, [activeSavedId, updateSavedListing, setActiveSavedId]);
 
+  /**
+   * Memoized calculation to determine which item is currently active (from history or saved).
+   */
   const activeItem = useMemo(() => {
       return history.find(h => h.id === activeHistoryId) || savedListings.find(s => s.id === activeSavedId) || null;
   }, [activeHistoryId, activeSavedId, history, savedListings]);
 
+  /**
+   * Memoized calculation to determine what content to display in the preview pane.
+   * It prioritizes an active history/saved item, falling back to a newly generated listing.
+   */
   const { listingToShow, platformToShow } = useMemo(() => {
     if (activeItem) {
         return { listingToShow: activeItem.listingData, platformToShow: activeItem.platform };
     }
     return { listingToShow: generatedListing as HistoryListing | null, platformToShow: selectedPlatform };
   }, [activeItem, generatedListing, selectedPlatform]);
-
-  const deselectItems = useCallback(() => {
-    setActiveHistoryId(null);
-    setActiveSavedId(null);
-    setPriceHistory(null);
-  }, [setActiveHistoryId, setActiveSavedId]);
-
-  const onPlatformChange = useCallback((platform: Platform) => {
-    setSelectedPlatform(platform);
-    deselectItems();
-  }, [deselectItems]);
-
-  const onTextChange = useCallback((text: string) => {
-    setTextInput(text);
-    deselectItems();
-  }, [deselectItems]);
-
-  const onImageChange = useCallback((image: ImageFile | null) => {
-    setImageFile(image);
-    deselectItems();
-  }, [deselectItems]);
   
+  /**
+   * Memoized logic for filtering and sorting the history and saved lists based on user input.
+   */
   const sortAndFilterListings = useCallback((list: HistoryItem[]) => {
       const sortedList = [...list].sort((a, b) => {
           switch (sortOption) {
@@ -187,7 +253,7 @@ const App: React.FC = () => {
               case 'name-desc': return (b.customTitle || b.listingData.listing.title).localeCompare(a.customTitle || a.listingData.listing.title);
               case 'platform-asc': return a.platform.localeCompare(b.platform);
               case 'platform-desc': return b.platform.localeCompare(a.platform);
-              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+              default: return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); // date-desc
           }
       });
       if (!searchQuery) return sortedList;
@@ -203,6 +269,9 @@ const App: React.FC = () => {
   const filteredHistory = useMemo(() => sortAndFilterListings(history), [history, sortAndFilterListings]);
   const filteredSavedListings = useMemo(() => sortAndFilterListings(savedListings), [savedListings, sortAndFilterListings]);
   
+  /**
+   * Prepares the data for the export modal. It uses the active item or the newly generated listing.
+   */
   const handleOpenExportModal = useCallback(() => {
       const item = activeItem || (generatedListing ? {
           id: 0, platform: selectedPlatform, input: { text: textInput, image: imageFile },
@@ -230,6 +299,8 @@ const App: React.FC = () => {
               onImageChange={onImageChange}
               onGenerate={handleGenerate}
               isLoading={isLoading}
+              isGenerationComplete={isGenerationComplete}
+              onStartNew={handleStartNewListing}
             />
             
             {(history.length > 0 || savedListings.length > 0) && (
@@ -237,7 +308,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                   <div className="relative flex-grow">
                     <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                       </svg>
                     </div>

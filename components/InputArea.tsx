@@ -2,28 +2,47 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ImageFile } from '../types';
 
 interface InputAreaProps {
+  /** The current text in the description textarea. */
   text: string;
+  /** Callback to update the text state. */
   onTextChange: (text: string) => void;
+  /** The current image file object, or null if none is selected. */
   image: ImageFile | null;
+  /** Callback to update the image state. */
   onImageChange: (image: ImageFile | null) => void;
+  /** Callback to trigger the listing generation process. */
   onGenerate: () => void;
+  /** Boolean flag indicating if the generation is in progress. */
   isLoading: boolean;
+  /** Boolean flag indicating if a generation has just completed successfully. */
+  isGenerationComplete: boolean;
+  /** Callback to reset the inputs and start a new listing. */
+  onStartNew: () => void;
 }
 
+/** The maximum character length for the text description input. */
 const MAX_TEXT_LENGTH = 1500;
 
+/**
+ * A utility function to convert a File object to a base64-encoded string.
+ * @param file The file to convert.
+ * @returns A promise that resolves with the base64 string (without the data URL prefix).
+ */
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
       const result = reader.result as string;
-      resolve(result.split(',')[1]);
+      resolve(result.split(',')[1]); // Removes the "data:mime/type;base64," part
     };
     reader.onerror = (error) => reject(error);
   });
 };
 
+/**
+ * A component that handles all user inputs: text description, image upload, and camera capture.
+ */
 export const InputArea: React.FC<InputAreaProps> = React.memo(({
   text,
   onTextChange,
@@ -31,12 +50,19 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
   onImageChange,
   onGenerate,
   isLoading,
+  isGenerationComplete,
+  onStartNew,
 }) => {
+  /** State to manage the visual feedback for drag-and-drop. */
   const [isDragging, setIsDragging] = useState(false);
+  /** State to toggle between file upload and camera capture UI. */
   const [inputMode, setInputMode] = useState<'upload' | 'camera'>('upload');
+  /** State to track the origin of the current image (for UI logic like 'Retake Photo'). */
   const [imageSource, setImageSource] = useState<'upload' | 'camera' | null>(null);
 
-  // Camera-related state
+  // ===================================
+  // Camera-related state and refs
+  // ===================================
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
@@ -45,6 +71,9 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  /**
+   * Safely stops all tracks on the current camera stream to turn off the camera.
+   */
   const stopCamera = useCallback(() => {
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
@@ -52,6 +81,10 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
     }
   }, [cameraStream]);
 
+  /**
+   * Starts the camera with the specified device ID.
+   * Handles common errors like permission denial or device not found.
+   */
   const startCamera = useCallback(async (deviceId: string) => {
     stopCamera(); 
     setCameraError(null);
@@ -66,27 +99,23 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
       setCameraStream(stream);
     } catch (err) {
       console.error("Error accessing camera:", err);
-      let detailedError = "An unknown error occurred while accessing the camera. Please try again or select a different camera.";
+      let detailedError = "An unknown error occurred while accessing the camera.";
       if (err instanceof DOMException) {
         switch (err.name) {
-          case "NotAllowedError":
-          case "PermissionDeniedError":
+          case "NotAllowedError": case "PermissionDeniedError":
             detailedError = "Camera access denied. Please grant permission in your browser's site settings and reload the page.";
             break;
-          case "NotFoundError":
-          case "DevicesNotFoundError":
-            detailedError = "No camera found. Please ensure a camera is connected and enabled in your system settings.";
+          case "NotFoundError": case "DevicesNotFoundError":
+            detailedError = "No camera found. Please ensure a camera is connected and enabled.";
             break;
-          case "NotReadableError":
-          case "TrackStartError":
-            detailedError = "The selected camera is currently in use by another application. Please close the other application and try again.";
+          case "NotReadableError": case "TrackStartError":
+            detailedError = "The selected camera is currently in use by another application.";
             break;
-          case "OverconstrainedError":
-          case "ConstraintNotSatisfiedError":
-             detailedError = "The selected camera does not support the required settings. Try selecting a different camera.";
+          case "OverconstrainedError": case "ConstraintNotSatisfiedError":
+             detailedError = "The selected camera does not support the required settings.";
              break;
           default:
-            detailedError = `An error occurred while accessing the camera (${err.name}). Please try again or select a different camera.`;
+            detailedError = `An error occurred while accessing the camera (${err.name}).`;
             break;
         }
       }
@@ -94,7 +123,10 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
     }
   }, [stopCamera]);
 
-  // Effect to enumerate devices and set a default when switching to camera mode.
+  /**
+   * Effect to get available video devices when the user switches to camera mode.
+   * It sets the first available device as the default.
+   */
   useEffect(() => {
     if (inputMode === 'camera') {
       let isCancelled = false;
@@ -105,34 +137,33 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
           setVideoDevices(videoInputs);
           
           if (videoInputs.length === 0) {
-              setCameraError("No camera devices were found. Please ensure a camera is connected and enabled in your system settings.");
+              setCameraError("No camera devices were found.");
           } else if (!selectedDeviceId && videoInputs.length > 0) {
-              // If no device is selected, set the first one as default.
-              // This will trigger the next useEffect to start the stream.
+              // Set the first camera as the default if none is selected
               setSelectedDeviceId(videoInputs[0].deviceId);
           }
         });
-      return () => {
-          isCancelled = true;
-      };
+      return () => { isCancelled = true; };
     }
   }, [inputMode, selectedDeviceId]);
 
 
-  // Effect to manage the camera stream (start/stop).
+  /**
+   * Effect to start or stop the camera stream when the mode or selected device changes.
+   * Includes a cleanup function to ensure the camera is turned off.
+   */
   useEffect(() => {
     if (inputMode === 'camera' && selectedDeviceId) {
         startCamera(selectedDeviceId);
     } else {
         stopCamera();
     }
-    
-    // Cleanup function: ensure camera is stopped when dependencies change or component unmounts.
-    return () => {
-      stopCamera();
-    };
+    return () => { stopCamera(); };
   }, [inputMode, selectedDeviceId, startCamera, stopCamera]);
 
+  /**
+   * Handles file selection from the input element and converts the file to base64.
+   */
   const handleFileChange = useCallback(async (files: FileList | null) => {
     if (files && files.length > 0) {
       const file = files[0];
@@ -146,6 +177,9 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
     }
   }, [onImageChange]);
 
+  /**
+   * Captures a frame from the live video stream and sets it as the current image.
+   */
   const handleCapture = useCallback(() => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
@@ -162,25 +196,23 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
           name: `capture-${new Date().toISOString()}.jpg`,
         });
         setImageSource('camera');
-        setInputMode('upload');
+        setInputMode('upload'); // Switch back to the upload view to show the captured preview
       }
     }
   }, [onImageChange]);
   
+  /**
+   * Removes the currently selected image.
+   */
   const handleRemoveImage = (e: React.MouseEvent) => {
     e.stopPropagation();
     onImageChange(null);
     setImageSource(null);
   };
 
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
+  // Drag-and-drop event handlers
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(false); };
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
@@ -190,6 +222,7 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
   const isTextTooLong = text.length > MAX_TEXT_LENGTH;
   const canGenerate = (text.trim().length > 0 || image) && !isLoading && !isTextTooLong;
   
+  /** Renders the UI for uploading a file. */
   const renderUploadView = () => (
     <>
       <div 
@@ -224,6 +257,7 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
     </>
   );
 
+  /** Renders the UI for capturing a photo with the camera. */
   const renderCameraView = () => (
     <div className="space-y-4 flex flex-col items-center">
         {cameraError ? (
@@ -324,21 +358,33 @@ export const InputArea: React.FC<InputAreaProps> = React.memo(({
         </div>
       </div>
 
-      <button
-        onClick={onGenerate}
-        disabled={!canGenerate}
-        className="w-full mt-6 flex items-center justify-center p-4 bg-primary text-white font-bold rounded-lg hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-      >
-        {isLoading ? (
-          <>
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Generating...
-          </>
-        ) : '3. Generate Listing'}
-      </button>
+      {isGenerationComplete ? (
+        <button
+          onClick={onStartNew}
+          className="w-full mt-6 flex items-center justify-center p-4 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Start New Listing
+        </button>
+      ) : (
+        <button
+          onClick={onGenerate}
+          disabled={!canGenerate}
+          className="w-full mt-6 flex items-center justify-center p-4 bg-primary text-white font-bold rounded-lg hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Generating...
+            </>
+          ) : '3. Generate Listing'}
+        </button>
+      )}
     </div>
   );
 });

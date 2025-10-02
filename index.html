@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Marketplace Listing Generator</title>
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Basic Tailwind configuration
       tailwind.config = {
         theme: {
           extend: {
@@ -19,6 +21,11 @@
         }
       }
     </script>
+    <!-- 
+      Import Map for browser-native ES Modules.
+      This tells the browser where to find modules when it sees an `import` statement.
+      This allows the app to run without a build step (like Vite or Webpack).
+    -->
     <script type="importmap">
 {
   "imports": {
@@ -34,8 +41,10 @@
   }
 }
 </script>
+    <!-- CDN scripts for PDF generation functionality -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Print-specific styles to ensure only the listing is printed -->
     <style>
       @media print {
         body, html {
